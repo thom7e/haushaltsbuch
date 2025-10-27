@@ -1,0 +1,1693 @@
+<!doctype html>
+<html lang="de" data-theme="auto">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Haushaltsbuch – Startseite</title>
+
+  <!-- Fonts & Libs -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="assets/js/charts.js"></script>
+
+  <style>
+    /* =========================
+       THEME VARIABLEN
+       ========================= */
+    :root {
+      --wrap-max:1100px;
+      --radius-lg:18px;
+      --radius-sm:12px;
+
+      --bg:#141923;
+      --panel:#1B2130;
+      --panel-2:#20283A;
+      --border:#2C384B;
+
+      --ink:#E7ECF6;
+      --muted:#AEB9CC;
+
+      --acc-income:#9AD0A1;
+      --acc-expense:#E6A8C6;
+
+      --acc1:#9AD0A1;
+      --acc2:#CDB6F6;
+      --acc3:#F2C6A0;
+      --acc4:#8EC8E6;
+      --acc5:#E6A8C6;
+
+      --chart-text:#E7ECF6;
+      --chart-grid:rgba(231,236,246,.10);
+      --chart-border:#2C384B;
+
+      --hover-bg:#232C40;
+      --hover-strong:#29344B;
+
+      --shadow-lg:0 18px 50px rgba(0,0,0,.5);
+      --shadow:0 12px 32px rgba(0,0,0,.40);
+    }
+
+    html[data-theme="light"]{
+      --bg:#F4EFE6;
+      --panel:#FFFFFFFA;
+      --panel-2:#FAF6EE;
+      --border:#E3D9C9;
+
+      --ink:#1F2430;
+      --muted:#6E7787;
+
+      --acc-income:#81A969;
+      --acc-expense:#E6A8C6;
+
+      --acc1:#81A969;
+      --acc2:#E3D4F6;
+      --acc3:#F2C6A0;
+      --acc4:#8EC8E6;
+      --acc5:#E6A8C6;
+
+      --chart-text:#1F2430;
+      --chart-grid:rgba(31,36,48,.08);
+      --chart-border:#E3D9C9;
+
+      --hover-bg:#F0E8DC;
+      --hover-strong:#EADFCC;
+
+      --shadow-lg:0 16px 42px rgba(0,0,0,.14);
+      --shadow:0 10px 28px rgba(0,0,0,.10);
+    }
+
+    /* =========================
+       BASICS / LAYOUT
+       ========================= */
+    *,*::before,*::after{ box-sizing:border-box; }
+
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      transition:background .2s,color .2s;
+    }
+
+    /* wird aktiv gesetzt, wenn ein Modal offen ist */
+    body.no-scroll{
+      overflow:hidden;
+      touch-action:none;
+    }
+
+    .wrap{
+      max-width:var(--wrap-max);
+      margin:0 auto;
+      padding:24px;
+    }
+
+    .title{
+      font-size:26px;
+      font-weight:800;
+      margin:0 0 16px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .right{margin-left:auto}
+    .muted{color:var(--muted)}
+
+    /* Pills (Badges) */
+    .pill{
+      padding:6px 12px;
+      border-radius:999px;
+      font-size:12px;
+      line-height:1.2;
+      border:1px solid var(--border);
+      background:var(--panel-2);
+      color:inherit;
+      white-space:nowrap;
+    }
+
+    /* =========================
+       CARDS / INPUTS / BUTTONS
+       ========================= */
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow);
+      padding:16px;
+      transition:box-shadow .2s,transform .12s,background .2s,border-color .2s;
+    }
+    .card.hoverable{cursor:pointer}
+    .card.hoverable:hover{
+      box-shadow:var(--shadow-lg);
+      transform:translateY(-2px);
+      background:var(--panel-2);
+    }
+
+    input,
+    select,
+    button{
+      background:var(--panel-2);
+      color:var(--ink);
+      border:1px solid var(--border);
+      border-radius:var(--radius-sm);
+      padding:10px 12px;
+      font-size:14px;
+      line-height:1.4;
+      outline:none;
+      width:100%;
+      transition:background .15s,border-color .15s,box-shadow .2s,transform .05s;
+    }
+
+    button{
+      cursor:pointer;
+    }
+    button:hover{
+      background:var(--hover-bg);
+      border-color:var(--chart-border);
+    }
+    button:active{
+      transform:translateY(1px);
+    }
+
+    select{
+      -webkit-appearance:none;
+      -moz-appearance:none;
+      appearance:none;
+      cursor:pointer;
+      padding-right:40px;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24'%3E%3Cpath fill='%23a6b0c3' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;
+      background-position:right 12px center;
+      background-size:18px;
+    }
+
+    /* =========================
+       METRICS
+       ========================= */
+    .metrics{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    @media(min-width:768px){
+      .metrics{
+        grid-template-columns:repeat(3,1fr);
+      }
+    }
+
+    .metric{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      box-shadow:var(--shadow);
+      padding:16px;
+      min-height:84px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .metric .label{
+      font-size:14px;
+      line-height:1.3;
+      color:var(--muted);
+      font-weight:500;
+    }
+    .metric .value{
+      font-size:28px;
+      font-weight:800;
+      line-height:1.1;
+      display:flex;
+      align-items:baseline;
+      gap:8px;
+    }
+    .metric .value.positive{color:var(--acc-income);}
+    .metric .value.negative{color:var(--acc-expense);}
+
+    /* =========================
+       FILTER-BAR RESPONSIVE
+       ========================= */
+    .controls{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    /* linke Seite */
+    .controls-block{
+      display:flex;
+      flex-direction:column;
+      flex:1 1 100%;
+      gap:12px;
+    }
+
+    .controls-row{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      width:100%;
+    }
+
+    .controls-col{
+      flex:1 1 auto;
+      min-width:0;
+    }
+
+    /* rechte Seite (Aktionen)
+       MOBILE: hidden */
+    .controls-actions{
+      display:none;
+    }
+
+    .btn-inline-new{
+      width:100%;
+      font-weight:600;
+      text-align:center;
+    }
+
+    /* ab 768px */
+    @media(min-width:768px){
+      .controls{
+        flex-wrap:nowrap;
+        align-items:flex-start;
+      }
+
+      .controls-block{
+        flex-direction:row;
+        flex-wrap:nowrap;
+        align-items:flex-start;
+        flex:1 1 auto;
+      }
+
+      .controls-row{
+        flex-wrap:nowrap;
+        width:auto;
+        flex:1 1 auto;
+      }
+
+      .controls-col.type,
+      .controls-col.cat{
+        flex:0 0 auto;
+        min-width:140px;
+      }
+
+      .controls-col.search{
+        flex:1 1 auto;
+        min-width:160px;
+      }
+
+      .controls-actions{
+        display:flex;
+        flex-wrap:nowrap;
+        gap:12px;
+        flex:0 0 auto;
+        align-items:flex-start;
+      }
+
+      .btn-inline-new{
+        width:auto;
+      }
+    }
+
+    /* FAB mobil */
+    .fab-new{
+      position:fixed;
+      right:16px;
+      bottom:16px;
+      background:radial-gradient(circle at 20% 20%, rgba(0,0,0,.4) 0%, rgba(0,0,0,0) 70%), var(--panel-2);
+      color:var(--ink);
+      border:1px solid var(--border);
+      border-radius:14px;
+      box-shadow:0 20px 40px rgba(0,0,0,.6);
+      padding:12px 14px;
+      font-size:15px;
+      font-weight:600;
+      line-height:1.2;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      z-index:300;
+      width:auto;
+      max-width:80%;
+      white-space:nowrap;
+    }
+    .fab-new .plus{
+      font-size:18px;
+      font-weight:700;
+      line-height:1;
+    }
+
+    @media(min-width:768px){
+      .fab-new{display:none;}
+    }
+    @media(max-width:767px){
+      .btn-inline-new{display:none;}
+    }
+
+    /* Abstand unten unter 768px,
+       damit FAB nix überlappt */
+    @media(max-width:767px){
+      .wrap{
+        padding-bottom:96px;
+      }
+    }
+
+    /* =========================
+       TABELLE
+       ========================= */
+    .table-wrapper{
+      width:100%;
+      overflow-x:auto;
+    }
+
+    table{
+      width:100%;
+      min-width:600px;
+      border-collapse:separate;
+      border-spacing:0;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:12px;
+      overflow:hidden;
+    }
+
+    thead th{
+      background:var(--panel-2);
+      color:var(--ink);
+      font-size:14px;
+      font-weight:600;
+      padding:14px;
+      border-bottom:1px solid var(--border);
+      text-align:left;
+      white-space:nowrap;
+    }
+    thead th.right{
+      text-align:right;
+    }
+
+    tbody td{
+      padding:14px;
+      border-bottom:1px solid var(--border);
+      vertical-align:top;
+      font-size:14px;
+      line-height:1.4;
+    }
+    tbody tr:last-child td{
+      border-bottom:none;
+    }
+
+    /* Gruppen-Header-Zeile */
+    .grp-head-row{
+      background:var(--panel-2);
+      border-bottom:1px solid var(--border);
+    }
+    .grp-head-inner{
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:10px;
+      font-weight:600;
+    }
+    .grp-head-left{
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .grp-head-type-income{
+      color:var(--acc-income);
+      font-weight:700;
+      text-transform:uppercase;
+      font-size:12px;
+      letter-spacing:.03em;
+    }
+    .grp-head-type-expense{
+      color:var(--acc-expense);
+      font-weight:700;
+      text-transform:uppercase;
+      font-size:12px;
+      letter-spacing:.03em;
+    }
+    .grp-head-total{
+      margin-left:auto;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:13px;
+    }
+    .grp-head-total .label{
+      color:var(--muted);
+      font-weight:500;
+    }
+    .grp-head-total .amount{
+      font-weight:700;
+    }
+    .grp-head-total.income .amount{color:var(--acc-income);}
+    .grp-head-total.expense .amount{color:var(--acc-expense);}
+
+    /* Einzelzeilen */
+    .grp-line{
+      cursor:pointer;
+      transition:background .12s;
+    }
+    .grp-line:hover{
+      background:var(--hover-strong);
+    }
+    .line-income{
+      background:color-mix(in oklab, var(--acc-income) 7%, transparent);
+      border-left:4px solid var(--acc-income);
+    }
+    .line-expense{
+      background:color-mix(in oklab, var(--acc-expense) 7%, transparent);
+      border-left:4px solid var(--acc-expense);
+    }
+
+    .cell-label{
+      font-weight:600;
+      color:var(--ink);
+      line-height:1.4;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .cell-meta{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:500;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+
+    .type-pill-income{
+      background:color-mix(in oklab, var(--acc-income) 22%, transparent);
+      border:1px solid var(--acc-income);
+      color:var(--acc-income);
+    }
+    .type-pill-expense{
+      background:color-mix(in oklab, var(--acc-expense) 22%, transparent);
+      border:1px solid var(--acc-expense);
+      color:var(--acc-expense);
+    }
+
+    .cell-amount{
+      font-size:15px;
+      font-weight:700;
+      text-align:right;
+      white-space:nowrap;
+    }
+    .cell-amount.income{color:var(--acc-income);}
+    .cell-amount.expense{color:var(--acc-expense);}
+
+    /* Aktionen-Zelle brauchen wir nicht mehr */
+    .actions-cell{ display:none; }
+
+    /* Pills-Zusatzinfos (Einnahme / Kategorie / fix/variabel) unter 1023px ausblenden */
+    @media(max-width:1023px){
+      .cell-meta { display:none; }
+      .kb-line-meta { display:none; }
+    }
+
+    /* Handy (<=742px):
+       - Nur Posten + Summe
+       - Typ/Kategorie-Spalten raus
+    */
+    @media(max-width:742px){
+      th.col-type,
+      th.col-cat {
+        display:none;
+      }
+      td.col-type,
+      td.col-cat {
+        display:none;
+      }
+      table {
+        min-width:0;
+      }
+    }
+
+    /* =========================
+       KANBAN (nur Desktop >1100px)
+       ========================= */
+    .kanban{display:none;}
+    @media(min-width:1100px){
+      .table-view{display:none;}
+      .kanban{display:block;}
+    }
+
+    .kb-board{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+      gap:16px;
+      align-items:start;
+    }
+    .kb-column{
+      background:var(--panel-2);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px;
+    }
+    .kb-card{
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:12px;
+      margin-bottom:8px;
+      background:var(--panel);
+      transition:border-color .15s,transform .12s,background .15s;
+      cursor:pointer;
+    }
+    .kb-card:hover{
+      border-color:var(--chart-border);
+      transform:translateY(-1px);
+      background:var(--hover-bg);
+    }
+    .kb-card-income{
+      border-left:4px solid var(--acc-income);
+      background:color-mix(in oklab, var(--acc-income) 7%, transparent);
+    }
+    .kb-card-expense{
+      border-left:4px solid var(--acc-expense);
+      background:color-mix(in oklab, var(--acc-expense) 7%, transparent);
+    }
+    .kb-line-top{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+    }
+    .kb-label{
+      font-weight:600;
+      color:var(--ink);
+      flex:1;
+    }
+    .kb-amount{
+      font-weight:700;
+      white-space:nowrap;
+    }
+    .kb-amount.income{color:var(--acc-income);}
+    .kb-amount.expense{color:var(--acc-expense);}
+    .kb-line-meta{
+      margin-top:4px;
+      font-size:12px;
+      line-height:1.4;
+      color:var(--muted);
+      font-weight:500;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+
+    /* =========================
+       ANALYTICS
+       ========================= */
+    #analytics{
+      max-width:var(--wrap-max);
+      margin:16px auto 0;
+    }
+    .analytics-grid{
+      display:grid;
+      gap:20px;
+      grid-template-columns:1fr;
+    }
+    .analytics-card{
+      padding:16px;
+      background:var(--panel-2);
+      border:1px solid var(--border);
+      border-radius:16px;
+    }
+    .analytics-card canvas{
+      width:100% !important;
+      height:360px !important;
+      display:block;
+    }
+
+    /* =========================
+       MODALS
+       ========================= */
+    .modal-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.55);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      z-index:400;
+    }
+    .modal-overlay.dlg{
+      z-index:420;
+    }
+
+    /* Standard-Dialog / Edit-Dialog */
+    .modal{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:18px;
+      box-shadow:var(--shadow-lg);
+      padding:18px;
+      max-height:90vh;
+      overflow-y:auto;
+      width:min(720px,calc(100vw - 32px));
+    }
+
+    /* Login-Dialog-Variante */
+    .modal.login-modal{
+      width:min(420px,calc(100vw - 24px));
+      border-radius:14px;
+      padding:16px;
+      max-height:90vh;
+      overflow-y:auto;
+    }
+    @media(max-width:400px){
+      .modal.login-modal{
+        width:calc(100vw - 16px);
+        border-radius:12px;
+        padding:14px;
+      }
+    }
+
+    .modal h3{
+      margin:0 0 12px;
+      font-size:20px;
+      font-weight:600;
+      line-height:1.3;
+    }
+    .modal p{
+      margin:0 0 12px;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.4;
+    }
+    .modal .actions{
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+      margin-top:12px;
+    }
+
+    .btn-primary{
+      background:color-mix(in oklab, var(--acc4) 16%, transparent);
+      border:1px solid var(--acc4);
+    }
+    .btn-primary:hover{
+      background:color-mix(in oklab, var(--acc4) 26%, transparent);
+    }
+    .btn-danger{
+      background:color-mix(in oklab, var(--acc-expense) 16%, transparent);
+      border:1px solid var(--acc-expense);
+    }
+
+    .sub-row{
+      display:grid;
+      grid-template-columns:1fr 140px 40px;
+      gap:8px;
+      margin-bottom:8px;
+    }
+  </style>
+
+  <script>
+    /* ======================================
+       AUTH / TOKEN HELPERS
+       ====================================== */
+    const API_BASE = '';
+    function token(){ return localStorage.getItem('hb_token'); }
+    function setToken(t){ localStorage.setItem('hb_token', t); }
+
+    async function authFetch(url, opts={}){
+      opts.headers = opts.headers || {};
+      const t = token();
+      if(t){ opts.headers['Authorization'] = 'Bearer ' + t; }
+      const res = await fetch(url, opts);
+      if(res.status === 401 || res.status === 403){
+        localStorage.removeItem('hb_token');
+        const ov = document.getElementById('loginOverlay');
+        if(ov){
+          ov.style.display = 'flex';
+          document.body.classList.add('no-scroll');
+        }
+        throw new Error('Unauthorized');
+      }
+      return res;
+    }
+
+    async function doLogin(username, password){
+      const res = await fetch(API_BASE + '/auth/login', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({username, password})
+      });
+      if(!res.ok){
+        let msg = 'Login fehlgeschlagen';
+        try {
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')){
+            const j = await res.json();
+            if (j?.detail) msg = (typeof j.detail==='string') ? j.detail : JSON.stringify(j.detail);
+          } else {
+            msg = await res.text();
+          }
+        } catch(e){}
+        alert(msg);
+        return;
+      }
+      const data = await res.json();
+      setToken(data.access_token);
+      await fetchMe();
+      const ov = document.getElementById('loginOverlay');
+      if(ov){
+        ov.style.display='none';
+        document.body.classList.remove('no-scroll');
+      }
+      if (window.App && typeof window.App.loadBootstrap === 'function'){
+        await window.App.loadBootstrap();
+      }
+    }
+
+    async function doRegister(username, password){
+      if(!username || username.trim().length < 3){
+        alert('Benutzername muss mindestens 3 Zeichen haben.');
+        return;
+      }
+      if(!password || password.length < 8){
+        alert('Passwort muss mindestens 8 Zeichen haben.');
+        return;
+      }
+      const r = await fetch(API_BASE + '/auth/register', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({username: username.trim(), password})
+      });
+      if(!r.ok){
+        let msg = 'Registrierung fehlgeschlagen';
+        try {
+          const ct = r.headers.get('content-type') || '';
+          if (ct.includes('application/json')){
+            const j = await r.json();
+            if (j?.detail) msg = (typeof j.detail==='string') ? j.detail : JSON.stringify(j.detail);
+          } else {
+            msg = await r.text();
+          }
+        } catch(e){}
+        alert(msg);
+        return;
+      }
+      await doLogin(username, password);
+    }
+
+    async function fetchMe(){
+      const r = await authFetch(API_BASE + '/me');
+      const me = await r.json();
+      window.HB_USER_ID = me.id;
+      return me;
+    }
+
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      if(token()){
+        try{
+          await fetchMe();
+        }catch(e){
+          const ov = document.getElementById('loginOverlay');
+          if(ov){
+            ov.style.display='flex';
+            document.body.classList.add('no-scroll');
+          }
+        }
+      }else{
+        const ov = document.getElementById('loginOverlay');
+        if(ov){
+          ov.style.display='flex';
+          document.body.classList.add('no-scroll');
+        }
+      }
+    });
+  </script>
+</head>
+
+<body x-data="app()" x-init="init()">
+
+  <!-- LOGIN MODAL -->
+  <div id="loginOverlay" class="modal-overlay" style="display:none;">
+    <div class="modal login-modal">
+      <h3>Login</h3>
+
+      <input id="li_user"
+             placeholder="Benutzername"
+             value="thom7e"
+             style="margin-bottom:12px;width:100%;" />
+
+      <input id="li_pw"
+             placeholder="Passwort"
+             type="password"
+             style="margin-bottom:16px;width:100%;" />
+
+      <div style="display:flex;flex-wrap:wrap;gap:12px;">
+        <button style="flex:1;min-width:120px;"
+          onclick="doLogin(
+            document.getElementById('li_user').value,
+            document.getElementById('li_pw').value
+          )">
+          Login
+        </button>
+
+        <button style="flex:1;min-width:120px;"
+          onclick="doRegister(
+            document.getElementById('li_user').value,
+            document.getElementById('li_pw').value
+          )">
+          Registrieren
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- Header -->
+    <h1 class="title">
+      🏠 Haushaltsbuch
+      <button id="themeToggle"
+              type="button"
+              class="right"
+              title="Theme wechseln"
+              style="display:flex;gap:8px;align-items:center"
+              @click="window.toggleTheme()">
+        <span id="themeIcon" aria-hidden="true">🌙</span>
+        <span class="muted" id="themeLabel">Dark</span>
+      </button>
+    </h1>
+
+    <!-- Metrics -->
+    <div class="metrics">
+      <div class="metric card hoverable">
+        <div class="label">Einnahmen</div>
+        <div class="value" x-text="fmt(sumIncome)"></div>
+      </div>
+      <div class="metric card hoverable">
+        <div class="label">Ausgaben</div>
+        <div class="value" x-text="fmt(sumExpense)"></div>
+      </div>
+      <div class="metric card hoverable">
+        <div class="label">Saldo</div>
+        <div class="value" :class="net>=0?'positive':'negative'" x-text="fmt(net)"></div>
+      </div>
+    </div>
+
+    <!-- Hauptkarte: Filter + Liste -->
+    <div class="card">
+      <!-- Filter -->
+      <div class="controls">
+        <!-- Linke Seite -->
+        <div class="controls-block">
+          <!-- Typ + Kategorie -->
+          <div class="controls-row">
+            <div class="controls-col type">
+              <select x-model="filter.type">
+                <option value="">Alle Typen</option>
+                <option value="income">Einnahmen</option>
+                <option value="expense">Ausgaben</option>
+              </select>
+            </div>
+
+            <div class="controls-col cat">
+              <select x-model="filter.category">
+                <option value="">Alle Kategorien</option>
+                <template x-for="c in mergedCategories" :key="c">
+                  <option :value="c" x-text="c"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <!-- Suche -->
+          <div class="controls-row">
+            <div class="controls-col search">
+              <input placeholder="Suche" x-model="filter.q" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Rechte Seite -->
+        <div class="controls-actions">
+          <button type="button" @click="addCategory()">Kategorie +</button>
+          <button type="button" @click="openCategoryManager()">Kategorien verwalten</button>
+          <button type="button" class="btn-inline-new" @click="newLine()">+ Neu</button>
+        </div>
+      </div>
+
+      <!-- Tabelle (<1100px sichtbar) -->
+      <div class="table-view">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-label">Posten</th>
+                <th class="col-type">Typ</th>
+                <th class="col-cat">Kategorie</th>
+                <th class="right col-sum">Summe</th>
+              </tr>
+            </thead>
+
+            <template x-for="g in filteredGroups" :key="g.type + '|' + g.category">
+              <tbody>
+                <!-- Gruppen-Header -->
+                <tr class="grp-head-row">
+                  <td colspan="4" style="padding:14px">
+                    <div class="grp-head-inner">
+                      <div class="grp-head-left">
+                        <div :class="g.type === 'income' ? 'grp-head-type-income' : 'grp-head-type-expense'"
+                             x-text="g.type === 'income' ? 'EINNAHMEN' : 'AUSGABEN'"></div>
+
+                        <span class="pill"
+                              :style="badgeColor(g.category)"
+                              x-text="g.category"></span>
+                      </div>
+
+                      <div class="grp-head-total"
+                           :class="g.type === 'income' ? 'income' : 'expense'">
+                        <span class="label">Zwischensumme:</span>
+                        <span class="amount" x-text="fmt(g.total)"></span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Zeilen -->
+                <template x-for="l in sortedLines(g)" :key="l.id">
+                  <tr class="grp-line"
+                      :class="l.type === 'income' ? 'line-income' : 'line-expense'"
+                      @click="open(l)">
+
+                    <!-- Posten + Meta -->
+                    <td class="col-label">
+                      <div class="cell-label" x-text="l.label"></div>
+                      <div class="cell-meta">
+                        <span class="pill"
+                              :class="l.type === 'income' ? 'type-pill-income' : 'type-pill-expense'"
+                              x-text="l.type === 'income' ? 'Einnahme' : 'Ausgabe'"></span>
+
+                        <span class="pill"
+                              :style="badgeColor(l.category)"
+                              x-text="l.category"></span>
+
+                        <template x-if="l.is_variable === true">
+                          <span class="pill">variabel</span>
+                        </template>
+                        <template x-if="l.is_variable === false">
+                          <span class="pill">fix</span>
+                        </template>
+                      </div>
+                    </td>
+
+                    <!-- Typ -->
+                    <td class="col-type">
+                      <span class="pill"
+                            :class="l.type === 'income' ? 'type-pill-income' : 'type-pill-expense'"
+                            x-text="l.type === 'income' ? 'Einnahme' : 'Ausgabe'"></span>
+                    </td>
+
+                    <!-- Kategorie -->
+                    <td class="col-cat">
+                      <span class="pill"
+                            :style="badgeColor(l.category)"
+                            x-text="l.category"></span>
+                    </td>
+
+                    <!-- Betrag -->
+                    <td class="cell-amount col-sum"
+                        :class="l.type === 'income' ? 'income' : 'expense'"
+                        x-text="fmt(total(l))"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </template>
+          </table>
+        </div>
+      </div>
+
+      <!-- Kanban (>=1100px sichtbar) -->
+      <div class="kanban" style="margin-top:12px">
+        <div class="kb-board">
+          <template x-for="g in filteredGroups" :key="g.type + ':' + g.category">
+            <div class="kb-column">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span class="pill type-pill-income" x-show="g.type==='income'">Einnahmen</span>
+                <span class="pill type-pill-expense" x-show="g.type==='expense'">Ausgaben</span>
+
+                <span class="pill"
+                      :style="badgeColor(g.category)"
+                      x-text="g.category"></span>
+
+                <span class="right muted"
+                      style="margin-left:auto;font-size:13px;display:flex;align-items:center;gap:4px">
+                  Σ <strong x-text="fmt(g.total)"></strong>
+                </span>
+              </div>
+
+              <template x-for="l in sortedLines(g)" :key="l.id">
+                <div class="kb-card"
+                     :class="l.type === 'income' ? 'kb-card-income' : 'kb-card-expense'"
+                     @click="open(l)">
+
+                  <div class="kb-line-top">
+                    <div class="kb-label" x-text="l.label"></div>
+                    <div class="kb-amount"
+                         :class="l.type === 'income' ? 'income' : 'expense'"
+                         x-text="fmt(total(l))"></div>
+                  </div>
+
+                  <div class="kb-line-meta">
+                    <span class="pill"
+                          :class="l.type === 'income' ? 'type-pill-income' : 'type-pill-expense'"
+                          x-text="l.type === 'income' ? 'Einnahme' : 'Ausgabe'"></span>
+
+                    <span class="pill"
+                          :style="badgeColor(l.category)"
+                          x-text="l.category"></span>
+
+                    <template x-if="l.is_variable === true">
+                      <span class="pill">variabel</span>
+                    </template>
+                    <template x-if="l.is_variable === false">
+                      <span class="pill">fix</span>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics -->
+    <section id="analytics" class="card">
+      <h2 class="title" style="margin:0 0 12px;font-size:20px;line-height:1.3">Auswertungen</h2>
+      <div class="analytics-grid">
+        <div class="analytics-card">
+          <h3 class="muted" style="margin:0 0 8px;font-size:14px;font-weight:600">Ausgaben nach Kategorie</h3>
+          <canvas id="donutByCategory"></canvas>
+        </div>
+        <div class="analytics-card">
+          <h3 class="muted" style="margin:0 0 8px;font-size:14px;font-weight:600">Top-10 Ausgabeposten</h3>
+          <canvas id="top10Expenses"></canvas>
+        </div>
+        <div class="analytics-card">
+          <h3 class="muted" style="margin:0 0 8px;font-size:14px;font-weight:600">Fix vs. Variabel</h3>
+          <canvas id="fixedVsVariable"></canvas>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ======= Universal Dialog ======= -->
+  <template x-if="dlg.open">
+    <div class="modal-overlay dlg" @click.self="closeDlg()" @keydown.escape.window.stop="closeDlg()">
+      <div class="modal" @keydown.escape.window="closeDlg()">
+        <h3 x-text="dlg.title"></h3>
+        <p x-text="dlg.message"></p>
+
+        <template x-if="dlg.mode==='input'">
+          <input x-model="dlg.value" placeholder="Eingabe…" @keydown.enter.prevent="confirmDlg()" />
+        </template>
+
+        <template x-if="dlg.mode==='select'">
+          <select x-model="dlg.value">
+            <template x-for="opt in dlg.options" :key="opt">
+              <option :value="opt" x-text="opt"></option>
+            </template>
+          </select>
+        </template>
+
+        <div class="actions">
+          <button type="button" @click="closeDlg()">Abbrechen</button>
+          <button type="button" class="btn-primary" @click="confirmDlg()">OK</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ======= Modal: Eintrag bearbeiten / neu ======= -->
+  <template x-if="current">
+    <div class="modal-overlay" @click.self="close()">
+      <div class="modal" @keydown.escape.window="close()">
+        <h3 x-text="current?.id ? 'Eintrag bearbeiten' : 'Neuer Eintrag'"></h3>
+
+        <!-- Bezeichnung -->
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Bezeichnung</label>
+          <input style="flex:1" placeholder="z. B. Einkommen / Telefon" x-model="current.label" />
+        </div>
+
+        <!-- Typ -->
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Typ</label>
+          <select x-model="current.type" style="flex:1;max-width:200px;">
+            <option value="income">Einnahme</option>
+            <option value="expense">Ausgabe</option>
+          </select>
+        </div>
+
+        <!-- Kategorie -->
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <label style="min-width:160px;flex:0 0 auto;">Kategorie</label>
+          <select x-model="current.category" style="flex:1;min-width:160px;">
+            <template x-for="c in mergedCategories" :key="c">
+              <option :value="c" x-text="c"></option>
+            </template>
+          </select>
+          <button type="button" style="flex:0 0 auto;width:auto" @click="addCategory()">Kategorie +</button>
+        </div>
+
+        <!-- Pauschalsumme -->
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Pauschalsumme</label>
+          <input type="number" step="0.01" x-model.number="current.base_amount" style="width:200px;max-width:200px;" />
+        </div>
+
+        <!-- Variabel -->
+        <label class="controls-row" style="gap:8px;align-items:center;">
+          <input type="checkbox" style="flex:0 0 auto;width:auto" x-model.boolean="current.is_variable">
+          <span style="flex:1 1 auto;">Als variabel markieren</span>
+        </label>
+
+        <!-- Einzelposten -->
+        <h3 class="muted" style="margin:12px 0 6px;font-size:14px;font-weight:600">Einzelposten</h3>
+        <template x-for="si in current.subitems" :key="si.id || si._key">
+          <div class="sub-row">
+            <input placeholder="Bezeichnung" x-model="si.label" />
+            <input type="number" step="0.01" x-model.number="si.amount" />
+            <button type="button" class="btn-link"
+                    style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer"
+                    @click.stop.prevent="removeSubPersist(si)">🗑️</button>
+          </div>
+        </template>
+
+        <div class="controls-row" style="margin-top:8px;align-items:center;">
+          <button type="button" style="flex:0 0 auto;width:auto" @click="addSub()">+ Einzelposten</button>
+          <span class="muted" style="margin-left:auto;font-size:14px;">
+            Gesamt: <strong x-text="fmt(total(current))"></strong>
+          </span>
+        </div>
+
+        <div class="controls-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
+          <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="save()">Speichern</button>
+          <template x-if="current?.id">
+            <button type="button" class="btn-danger" style="flex:0 0 auto;width:auto" @click="delCurrent()">Löschen</button>
+          </template>
+          <button type="button" style="flex:0 0 auto;width:auto" @click="close()">Schließen</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ======= Modal: Kategorien verwalten ======= -->
+  <template x-if="categoryManagerOpen">
+    <div class="modal-overlay" @click.self="closeCategoryManager()">
+      <div class="modal" @keydown.escape.window="closeCategoryManager()">
+        <h3>Kategorien verwalten</h3>
+        <p class="muted" x-text="'Gesamt: ' + managerCategories.length"></p>
+
+        <div class="card" style="max-height:50vh;overflow:auto">
+          <div class="controls-row" style="font-weight:700;margin-bottom:6px">
+            <div style="flex:1">Kategorie</div>
+            <div class="right" style="width:280px;text-align:right">Aktionen</div>
+          </div>
+
+          <template x-for="c in managerCategories" :key="'mgr-'+c">
+            <div class="controls-row" style="padding:8px 0;border-top:1px solid var(--border);flex-wrap:nowrap;align-items:flex-start;">
+              <div style="display:flex;align-items:center;gap:8px;flex:1">
+                <span class="pill" :style="badgeColor(c)" x-text="c"></span>
+              </div>
+              <div class="right" style="display:flex;gap:8px">
+                <button type="button" @click="renameCategory(c)">Umbenennen</button>
+                <button type="button" class="btn-danger" @click="deleteCategoryFlow(c)">Löschen</button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="controls-row" style="justify-content:flex-end;margin-top:12px;">
+          <button type="button" style="width:auto" @click="closeCategoryManager()">Schließen</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Theme Switcher init -->
+  <script>
+    (function(){
+      const root = document.documentElement;
+      const stored = localStorage.getItem('hb_theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      const setTheme = (mode)=>{
+        root.setAttribute('data-theme', mode);
+        localStorage.setItem('hb_theme', mode);
+        const effective = mode==='auto' ? (prefersDark?'dark':'light') : mode;
+        const icon = document.getElementById('themeIcon');
+        const label = document.getElementById('themeLabel');
+        if(icon && label){
+          icon.textContent = effective==='dark' ? '🌙' : '☀️';
+          label.textContent = effective==='dark' ? 'Dark' : 'Light';
+        }
+        document.dispatchEvent(new CustomEvent('themechange', {detail:{mode:effective}}));
+      };
+
+      setTheme(stored || 'auto');
+
+      window.toggleTheme = () => {
+        const cur = root.getAttribute('data-theme') || 'auto';
+        const next = (cur==='auto')
+          ? (prefersDark?'light':'dark')
+          : (cur==='light'?'dark':'light');
+        setTheme(next);
+      };
+    })();
+  </script>
+
+  <!-- Alpine App -->
+  <script>
+    function app(){
+      return {
+        api: (localStorage.getItem('hb_api') || window.location.origin),
+
+        // ---- State ----
+        lines: [],
+        groups: [],
+        current: null,
+
+        categoriesServer: [],
+        sessionCategories: [],
+        customColors: {},
+
+        categoryManagerOpen: false,
+
+        dlg:{open:false, mode:'input', title:'', message:'', value:'', options:[], resolve:null},
+
+        filter:{type:'', category:'', q:''},
+        sumIncome:0, sumExpense:0,
+        get net(){ return this.sumIncome - this.sumExpense },
+
+        async init(){
+          window.App = this;
+          if (localStorage.getItem('hb_token')) {
+            await this.loadBootstrap();
+          } else {
+            const ov = document.getElementById('loginOverlay');
+            if (ov){
+              ov.style.display = 'flex';
+              document.body.classList.add('no-scroll');
+            }
+          }
+        },
+
+        async loadBootstrap(){
+          this.customColors = JSON.parse(localStorage.getItem('hb_categoryColors') || '{}');
+          await this.load();
+        },
+
+        async load(){
+          const resLines  = await authFetch(this.api + '/api/lines?sort=category');
+          this.lines  = await resLines.json();
+
+          const resGroups = await authFetch(this.api + '/api/groups');
+          this.groups = await resGroups.json();
+
+          await this.loadCategories();
+          this.compute();
+          window.refreshFinanceCharts && window.refreshFinanceCharts();
+        },
+
+        async loadCategories(){
+          try{
+            const r = await authFetch(this.api + '/api/categories');
+            this.categoriesServer = await r.json();
+          }catch{
+            this.categoriesServer = [];
+          }
+        },
+
+        /* Kategorien */
+        get mergedCategories(){
+          const set = new Set([...(this.categoriesServer||[]), ...(this.sessionCategories||[])]);
+          return Array.from(set).sort((a,b)=>a.localeCompare(b,'de'));
+        },
+        get managerCategories(){
+          return (this.categoriesServer || []).slice().sort((a,b)=>a.localeCompare(b,'de'));
+        },
+
+        async addCategory(){
+          const val = await this.promptInput('Neue Kategorie', 'Bitte Bezeichnung eingeben:','');
+          if(val===null) return;
+          const name = (val||'').trim();
+          if(!name) return;
+
+          if(!this.sessionCategories.includes(name)){
+            this.sessionCategories.push(name);
+          }
+          if(!this.customColors[name]){
+            this.customColors[name] = this.randomBadgeStyle();
+            this.persist('hb_categoryColors', this.customColors);
+          }
+
+          if(this.current){ this.current.category = name; }
+          this.compute();
+        },
+
+        async openCategoryManager(){
+          await this.loadCategories();
+          this.categoryManagerOpen = true;
+          document.body.classList.add('no-scroll');
+        },
+        closeCategoryManager(){
+          this.categoryManagerOpen = false;
+          document.body.classList.remove('no-scroll');
+        },
+
+        async deleteCategoryFlow(cat){
+          const affected = (this.groups || [])
+            .filter(g => g.category === cat)
+            .flatMap(g => g.lines || [])
+            .length;
+
+          let target = null;
+          if (affected > 0){
+            const choices = this.mergedCategories.filter(c => c !== cat);
+            if (choices.length === 0){
+              const ok = confirm(`"${cat}" hat ${affected} Einträge.\nOhne Ziel werden sie je nach Typ auf Standardkategorien umgehängt. Fortfahren?`);
+              if(!ok) return;
+            } else {
+              target = await this.promptSelect(
+                'Kategorie löschen',
+                `"${cat}" hat ${affected} Einträge. Zielkategorie wählen:`,
+                choices,
+                choices[0]
+              );
+              if(target === null) return;
+            }
+          }
+
+          const url = this.api + '/api/categories/' + encodeURIComponent(cat)
+                    + (target ? ('?target=' + encodeURIComponent(target)) : '');
+          const res = await authFetch(url, { method: 'DELETE' });
+
+          if(!res.ok){
+            let msg = 'Kategorie konnte nicht gelöscht werden';
+            try{
+              const ct = res.headers.get('content-type') || '';
+              if(ct.includes('application/json')){
+                const j = await res.json();
+                msg = (typeof j?.detail === 'string') ? j.detail : JSON.stringify(j);
+              } else {
+                msg = await res.text();
+              }
+            }catch(e){}
+            alert(msg);
+            return;
+          }
+
+          if (this.filter?.category === cat) this.filter.category = '';
+          this.sessionCategories = this.sessionCategories.filter(x => x !== cat);
+
+          await this.loadCategories();
+          await this.load();
+        },
+
+        async renameCategory(oldName){
+          const val = await this.promptInput('Kategorie umbenennen', `${oldName} →`, oldName);
+          if (val === null) return;
+          const name = (val||'').trim();
+          if (!name || name === oldName) return;
+          if (this.mergedCategories.includes(name)){
+            alert('Kategorie existiert bereits.');
+            return;
+          }
+
+          const res = await authFetch(this.api + '/api/categories/rename', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ old: oldName, new: name })
+          });
+          if(!res.ok){
+            let msg = 'Umbenennen fehlgeschlagen';
+            try{
+              const ct = res.headers.get('content-type') || '';
+              if(ct.includes('application/json')){
+                const j = await res.json();
+                msg = (typeof j?.detail === 'string') ? j.detail : JSON.stringify(j);
+              } else {
+                msg = await res.text();
+              }
+            }catch(e){}
+            alert(msg);
+            return;
+          }
+
+          if (this.customColors[oldName] && !this.customColors[name]) {
+            this.customColors[name] = this.customColors[oldName];
+          }
+          delete this.customColors[oldName];
+          this.persist('hb_categoryColors', this.customColors);
+
+          this.sessionCategories = this.sessionCategories.map(c => c===oldName ? name : c);
+
+          await this.loadCategories();
+          await this.load();
+        },
+
+        /* Utils */
+        badgeColor(cat){
+          const base='color:inherit;border:1px solid var(--border);';
+          const p=(hex,pct)=>`background:color-mix(in oklab, ${hex} ${pct}%, transparent)`;
+          const map={
+            'mieteinnahmen':`${base};${p('var(--acc4)',24)};`,
+            'gehalt':`${base};${p('var(--acc1)',24)};`,
+            'sonstige einnahmen':`${base};${p('var(--acc5)',24)};`,
+            'versicherungen':`${base};${p('var(--acc3)',24)};`,
+            'finanzierungen':`${base};${p('var(--acc5)',24)};`,
+            'rücklagen':`${base};${p('var(--acc2)',24)};`,
+            'sparen':`${base};${p('var(--acc4)',24)};`,
+            'Lebensmittel und Sonstiges':`${base};${p('var(--acc1)',24)};`,
+            'Nebenkosten':`${base};${p('var(--acc3)',24)};`,
+            'Kinder':`${base};${p('var(--acc2)',24)};`,
+            'sonstige ausgaben':`${base};${p('var(--acc5)',24)};`
+          };
+          return map[cat] || `${base};${p('#9aa7bd',20)};`;
+        },
+        persist(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+
+        compute(){
+          const t = (l)=> this.total(l);
+          const flat = this.filteredGroups.flatMap(g => g.lines);
+          this.sumIncome  = flat.filter(l=>l.type==='income').reduce((a,b)=>a+t(b),0);
+          this.sumExpense = flat.filter(l=>l.type==='expense').reduce((a,b)=>a+t(b),0);
+          window.refreshFinanceCharts && window.refreshFinanceCharts();
+        },
+
+        get filteredGroups(){
+          const q=(this.filter.q||'').toLowerCase();
+          const out=[];
+          for(const g of this.groups){
+            if(this.filter.type && g.type !== this.filter.type) continue;
+            if(this.filter.category && g.category !== this.filter.category) continue;
+            const lines = g.lines.filter(l=>{
+              if(q && !(l.label||'').toLowerCase().includes(q)) return false;
+              return true;
+            });
+            if(lines.length){
+              const total = lines.reduce((a,b)=>a+this.total(b),0);
+              out.push({type:g.type,category:g.category,total,lines});
+            }
+          }
+          return out;
+        },
+
+        sortedLines(g){
+          return g.lines.slice().sort((a,b)=> this.total(b) - this.total(a));
+        },
+
+        total(l){
+          if(!l) return 0;
+          if(Array.isArray(l.subitems) && l.subitems.length>0){
+            return l.subitems.reduce((a,b)=>a+Number(b.amount||0),0);
+          }
+          return Number(l.base_amount||0);
+        },
+
+        fmt(v){
+          return new Intl.NumberFormat('de-DE',{
+            style:'currency',currency:'EUR'
+          }).format(Number(v||0));
+        },
+
+        /* CRUD Lines */
+        open(l){
+          this.current = JSON.parse(JSON.stringify(l));
+          document.body.classList.add('no-scroll');
+        },
+        close(){
+          this.current = null;
+          document.body.classList.remove('no-scroll');
+        },
+        newLine(){
+          const first = (this.mergedCategories[0] || 'sonstige ausgaben');
+          this.current = {
+            id:null,
+            label:'',
+            type:'expense',
+            category:first,
+            base_amount:0,
+            subitems:[],
+            is_variable:null
+          };
+          document.body.classList.add('no-scroll');
+        },
+        addSub(){
+          this.current.subitems.push({
+            id:null,
+            _key:crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2),
+            label:'',
+            amount:0
+          });
+        },
+        async removeSubPersist(si){
+          if(si.id && this.current?.id){
+            const res=await authFetch(this.api+'/api/lines/'+this.current.id+'/subitems/'+si.id,{
+              method:'DELETE'
+            });
+            if(!res.ok){
+              alert('Einzelposten konnte nicht gelöscht werden');
+              return;
+            }
+            const updated=await res.json();
+            this.current.subitems = updated.subitems || [];
+          }else{
+            this.current.subitems = this.current.subitems.filter(x=>x!==si);
+          }
+        },
+        async delCurrent(){
+          if(!this.current?.id) return;
+          if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+          const res = await authFetch(this.api + '/api/lines/' + this.current.id, {
+            method:'DELETE'
+          });
+          if(!res.ok){
+            alert('Löschen fehlgeschlagen');
+            return;
+          }
+          this.close();
+          await this.load();
+        },
+
+        async save(){
+          if(!this.current.label || !this.current.type || !this.current.category){
+            alert('Bitte Bezeichnung, Typ und Kategorie ausfüllen.');
+            return;
+          }
+
+          const hasId = !!this.current.id;
+          const url = this.api + (hasId ? '/api/lines/' + this.current.id : '/api/lines');
+          const method = hasId ? 'PUT' : 'POST';
+
+          const payload = JSON.parse(JSON.stringify(this.current));
+          if(!hasId){ delete payload.id; }
+          payload.base_amount = Number(payload.base_amount || 0);
+          payload.subitems = (payload.subitems||[]).map(si => ({
+            id: si.id || null,
+            label: si.label || '',
+            amount: Number(si.amount || 0)
+          }));
+
+          const res = await authFetch(url, {
+            method,
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+          });
+          if(!res.ok){
+            let msg = 'Fehler beim Speichern';
+            try{
+              const ct = res.headers.get('content-type')||'';
+              if(ct.includes('application/json')){
+                const j = await res.json();
+                msg = (typeof j?.detail === 'string') ? j.detail : JSON.stringify(j);
+              }else{
+                msg = await res.text();
+              }
+            }catch(e){}
+            alert(msg);
+            return;
+          }
+
+          const cat = this.current.category;
+          if (
+            !this.categoriesServer.includes(cat) &&
+            !this.sessionCategories.includes(cat)
+          ){
+            this.sessionCategories.push(cat);
+          }
+
+          this.close();
+          await this.load();
+        },
+
+        /* Dialog Helpers */
+        openDlg(cfg){
+          this.dlg = Object.assign(this.dlg,{open:true, ...cfg});
+          document.body.classList.add('no-scroll');
+        },
+        closeDlg(){
+          if(this.dlg.resolve){
+            this.dlg.resolve(null);
+          }
+          this.dlg.open=false;
+          document.body.classList.remove('no-scroll');
+        },
+        confirmDlg(){
+          if(this.dlg.resolve){
+            this.dlg.resolve(this.dlg.value||'');
+          }
+          this.dlg.open=false;
+          document.body.classList.remove('no-scroll');
+        },
+        promptInput(title, message='', def=''){
+          return new Promise(res=>{
+            this.openDlg({
+              mode:'input',title,message,value:def,resolve:res
+            });
+          });
+        },
+        promptSelect(title, message='', options=[], def=''){
+          return new Promise(res=>{
+            this.openDlg({
+              mode:'select',
+              title,
+              message,
+              options,
+              value:def||options[0]||'',
+              resolve:res
+            });
+          });
+        },
+
+        randomBadgeStyle(){
+          const h=Math.floor(Math.random()*360);
+          const s=65+Math.floor(Math.random()*20);
+          const lBg=80+Math.floor(Math.random()*10);
+          const lBd=55+Math.floor(Math.random()*10);
+          return `background:hsla(${h},${s}%,${lBg}%,.18);border:1px solid hsl(${h},${s}%,${lBd}%);`;
+        },
+      }
+    }
+  </script>
+
+  <!-- Floating "+ Neu" FAB nur mobil -->
+  <button class="fab-new" @click="newLine()">
+    <span class="plus">＋</span>
+    <span>Neu</span>
+  </button>
+
+</body>
+</html>

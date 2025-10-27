@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+
+passlib[bcrypt]
+bcrypt==3.2.2
+PyJWT
