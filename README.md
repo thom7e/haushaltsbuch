@@ -62,13 +62,6 @@ Dann im Browser öffnen:
 http://127.0.0.1:8000/static/index.html
 ```
 
-Beim ersten Start existiert ein **Standardbenutzer**:
-
-```
-Benutzername: thom7e
-Passwort: 1lKaHuber#
-```
-
 Nach dem Login können neue Benutzer angelegt und der Standard-User entfernt werden.
 
 ---
