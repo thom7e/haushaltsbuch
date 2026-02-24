@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+db.json
+db.json.tmp
+*.pyc
+.env
+db.json
