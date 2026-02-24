@@ -114,12 +114,13 @@
       options:{
         plugins:{
           legend:{
-            position:'right',
+            position: isMobile() ? 'bottom' : 'right',
             labels:{
-              boxWidth:14,
-              boxHeight:14,
+              boxWidth:  isMobile() ? 10 : 14,
+              boxHeight: isMobile() ? 10 : 14,
               color:P.text,
-              font:{size:12,weight:'600'}
+              font:{size: isMobile() ? 10 : 12, weight:'600'},
+              padding: isMobile() ? 6 : 10
             }
           },
           tooltip:{
@@ -132,8 +133,9 @@
       }
     });
 
-    // Click -> Kategorie filtern
+    // Click -> Kategorie filtern (nur Desktop, da mobil Seite springt)
     el.onclick = (e)=>{
+      if (isMobile()) return;
       const pts = CH_DONUT.getElementsAtEventForMode(e,'nearest',{intersect:true},true);
       if(!pts?.length) return;
       onClick(labels[pts[0].index]);
@@ -145,12 +147,12 @@
     const P = paletteFromCSS();
     const rows   = top10(lines);
 
-    // Daten
-    const labels = rows.map(r=>shorten(r.label, 40));
-    const values = rows.map(r=>r.value);
-
-    // Responsive Balken-Style
+    // Responsive vor den Labels bestimmen
     const mobile = isMobile();
+
+    // Daten — kürzere Labels auf Mobile
+    const labels = rows.map(r=>shorten(r.label, mobile ? 16 : 36));
+    const values = rows.map(r=>r.value);
     const barThickness        = mobile ? 14 : 22;   // dünner auf Handy
     const maxBarThickness     = mobile ? 18 : 28;
     const categoryPercentage  = mobile ? 0.6 : 0.8; // mehr Luft zwischen Kategorien

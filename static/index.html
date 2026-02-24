@@ -90,6 +90,8 @@
       font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
       -webkit-font-smoothing:antialiased;
       transition:background .2s,color .2s;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
     }
 
     /* wird aktiv gesetzt, wenn ein Modal offen ist */
@@ -650,7 +652,23 @@
       overflow-y:auto;
       overscroll-behavior:contain;
       -webkit-overflow-scrolling:touch;
+      will-change:transform;
       width:min(720px,calc(100vw - 32px));
+    }
+
+    /* Handle-Bar für Bottom-Sheet (nur mobile sichtbar) */
+    .sheet-handle{
+      display:none;
+      width:44px;
+      height:5px;
+      border-radius:3px;
+      background:var(--border);
+      margin:0 auto 14px;
+      cursor:ns-resize;
+      touch-action:none;
+      user-select:none;
+      -webkit-user-select:none;
+      flex-shrink:0;
     }
 
     /* Login-Dialog-Variante */
@@ -844,15 +862,9 @@
         padding-bottom:max(24px, env(safe-area-inset-bottom));
         animation:slideUp .22s ease-out;
       }
-      /* Handle-Bar als visueller Hinweis */
-      .modal-overlay:not(.dlg):not(#loginOverlay) > .modal::before {
-        content:'';
+      /* Handle-Bar: real div wird sichtbar (ersetzt ::before) */
+      .sheet-handle {
         display:block;
-        width:36px;
-        height:4px;
-        border-radius:2px;
-        background:var(--border);
-        margin:0 auto 16px;
       }
       @keyframes slideUp {
         from { transform:translateY(100%); }
@@ -886,9 +898,12 @@
         padding:14px 18px;
       }
 
-      /* 9. Chart-Höhe: 360px → 220px auf Mobile */
+      /* 9. Chart-Höhe reduziert + Top-10 etwas höher für 10 Einträge */
       .chart-container {
-        height:220px;
+        height:240px;
+      }
+      .analytics-grid .analytics-card:nth-child(2) .chart-container {
+        height:320px;
       }
 
       /* 10. Analytics kompakter */
@@ -1361,8 +1376,12 @@
 
   <!-- ======= Modal: Eintrag bearbeiten / neu ======= -->
   <template x-if="current">
-    <div class="modal-overlay" @click.self="close()">
-      <div class="modal" @keydown.escape.window="close()">
+    <div class="modal-overlay" @click.self="sheetClose($event, () => close())">
+      <div class="modal" @keydown.escape.window="sheetClose($event, () => close())">
+        <div class="sheet-handle"
+             @touchstart.passive="dragStart($event, () => close())"
+             @touchmove.prevent="dragMove($event)"
+             @touchend="dragEnd($event)"></div>
         <h3 x-text="current?.id ? 'Eintrag bearbeiten' : 'Neuer Eintrag'"></h3>
 
         <!-- Bezeichnung -->
@@ -1427,7 +1446,7 @@
           <template x-if="current?.id">
             <button type="button" class="btn-danger" style="flex:0 0 auto;width:auto" @click="delCurrent()">Löschen</button>
           </template>
-          <button type="button" style="flex:0 0 auto;width:auto" @click="close()">Schließen</button>
+          <button type="button" style="flex:0 0 auto;width:auto" @click="sheetClose($event, () => close())">Schließen</button>
         </div>
       </div>
     </div>
@@ -1435,8 +1454,12 @@
 
   <!-- ======= Modal: Kategorien verwalten ======= -->
   <template x-if="categoryManagerOpen">
-    <div class="modal-overlay" @click.self="closeCategoryManager()">
-      <div class="modal" @keydown.escape.window="closeCategoryManager()">
+    <div class="modal-overlay" @click.self="sheetClose($event, () => closeCategoryManager())">
+      <div class="modal" @keydown.escape.window="sheetClose($event, () => closeCategoryManager())">
+        <div class="sheet-handle"
+             @touchstart.passive="dragStart($event, () => closeCategoryManager())"
+             @touchmove.prevent="dragMove($event)"
+             @touchend="dragEnd($event)"></div>
         <h3>Kategorien verwalten</h3>
         <p class="muted" x-text="'Gesamt: ' + managerCategories.length"></p>
 
@@ -1460,7 +1483,7 @@
         </div>
 
         <div class="controls-row" style="justify-content:flex-end;margin-top:12px;">
-          <button type="button" style="width:auto" @click="closeCategoryManager()">Schließen</button>
+          <button type="button" style="width:auto" @click="sheetClose($event, () => closeCategoryManager())">Schließen</button>
         </div>
       </div>
     </div>
@@ -1517,6 +1540,7 @@
         categoryManagerOpen: false,
 
         dlg:{open:false, mode:'input', title:'', message:'', value:'', options:[], resolve:null},
+        _drag:{on:false, startY:0, lastY:0, t:0, vel:0, fn:null},
 
         filter:{type:'', category:'', q:''},
         sumIncome:0, sumExpense:0,
@@ -1930,6 +1954,58 @@
           const lBg=80+Math.floor(Math.random()*10);
           const lBd=55+Math.floor(Math.random()*10);
           return `background:hsla(${h},${s}%,${lBg}%,.18);border:1px solid hsl(${h},${s}%,${lBd}%);`;
+        },
+
+        /* ---- Bottom-Sheet: animiertes Schließen ---- */
+        sheetClose(ev, fn){
+          if (!window.matchMedia('(max-width:767px)').matches){ fn(); return; }
+          let modal = null;
+          const ct = ev?.currentTarget;
+          if (ct instanceof Element){
+            modal = ct.closest('.modal') || ct.querySelector('.modal');
+          }
+          if (!modal){
+            modal = document.querySelector('.modal-overlay:not(.dlg):not(#loginOverlay) .modal');
+          }
+          if (!modal){ fn(); return; }
+          modal.style.transition = 'transform .2s ease-in';
+          modal.style.transform  = 'translateY(110%)';
+          setTimeout(()=>{ modal.style.transform=''; modal.style.transition=''; fn(); }, 200);
+        },
+
+        /* ---- Bottom-Sheet: Wisch-Geste ---- */
+        dragStart(ev, fn){
+          const tp = ev.touches[0];
+          this._drag = { on:true, startY:tp.clientY, lastY:tp.clientY, t:Date.now(), vel:0, fn };
+        },
+        dragMove(ev){
+          if (!this._drag.on) return;
+          const tp = ev.touches[0];
+          const dy = tp.clientY - this._drag.startY;
+          if (dy <= 0) return;
+          const now = Date.now();
+          this._drag.vel = (tp.clientY - this._drag.lastY) / Math.max(1, now - this._drag.t);
+          this._drag.lastY = tp.clientY;
+          this._drag.t = now;
+          const modal = ev.currentTarget.closest('.modal');
+          if (modal) modal.style.transform = `translateY(${dy}px)`;
+        },
+        dragEnd(ev){
+          if (!this._drag.on) return;
+          const d = { ...this._drag };
+          this._drag.on = false;
+          const modal = ev.currentTarget.closest('.modal');
+          if (!modal) return;
+          const dy = d.lastY - d.startY;
+          if (dy > 90 || d.vel > 0.4){
+            modal.style.transition = 'transform .2s ease-in';
+            modal.style.transform  = 'translateY(110%)';
+            setTimeout(()=>{ modal.style.transform=''; modal.style.transition=''; d.fn?.(); }, 200);
+          } else {
+            modal.style.transition = 'transform .35s cubic-bezier(.34,1.56,.64,1)';
+            modal.style.transform  = 'translateY(0)';
+            setTimeout(()=>{ modal.style.transform=''; modal.style.transition=''; }, 350);
+          }
         },
       }
     }
