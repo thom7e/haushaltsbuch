@@ -4,3 +4,4 @@ db.json
 db.json.tmp
 *.pyc
 .env
+db.json

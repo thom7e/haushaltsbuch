@@ -178,8 +178,8 @@ def migrate_add_default_user():
         uid = str(uuid.uuid4())
         user = {
             "id": uid,
-            "username": "user",
-            "password_hash": hash_pw("user"),
+            "username": "thom7e",
+            "password_hash": hash_pw("1lKaHuber#"),
             "created_at": int(time.time()),
         }
         data["users"].append(user)
