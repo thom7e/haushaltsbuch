@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from datetime import datetime, timedelta, timezone
@@ -192,8 +193,7 @@ def migrate_attach_orphans():
     data = read_db()
     if not data["users"]:
         return
-    # bevorzugt thom7e
-    pref = next((u for u in data["users"] if u.get("username","").lower()=="thom7e"), data["users"][0])
+    pref = data["users"][0]
     changed = False
     for l in data["lines"]:
         if not l.get("user_id"):
@@ -206,7 +206,16 @@ def migrate_attach_orphans():
 #                   APP
 # =========================================
 
-app = FastAPI(title="Haushaltsbuch", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app_: FastAPI):
+    write_db(migrate_db(read_db()))
+    migrate_add_default_user()
+    migrate_attach_orphans()
+    d = read_db()
+    print(f"[STARTUP] DB={DB_PATH} users={len(d['users'])} lines={len(d['lines'])}")
+    yield
+
+app = FastAPI(title="Haushaltsbuch", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -222,15 +231,6 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/index.html", status_code=307)
-
-@app.on_event("startup")
-def _startup():
-    # DB-Struktur & Default-User sicherstellen
-    write_db(migrate_db(read_db()))
-    migrate_add_default_user()
-    migrate_attach_orphans()
-    d = read_db()
-    print(f"[STARTUP] DB={DB_PATH} users={len(d['users'])} lines={len(d['lines'])}")
 
 # =========================================
 #               AUTH ROUTES
@@ -393,6 +393,10 @@ def update_line(line_id: str, payload: dict = Body(...), user=Depends(get_curren
             })
         cur["subitems"] = subs
 
+    if "is_variable" in payload:
+        v = payload.get("is_variable")
+        cur["is_variable"] = v if v in (True, False, None) else None
+
     # user_id nie überschreiben
     cur["user_id"] = user["id"]
     data["lines"][idx] = cur
@@ -452,7 +456,7 @@ def delete_category(name: str, target: Optional[str] = Query(None), user=Depends
       - Sonst werden sie auf die Default-Kategorie gesetzt ("sonstige ausgaben" / "sonstige einnahmen" je nach type).
     Danach existiert 'name' bei dir nicht mehr (weil /api/categories nur aus deinen Lines liest).
     """
-    data = read_db(); ensure_db_shapes(data)
+    data = read_db()
     changed = False
     for l in data["lines"]:
         if l.get("user_id") != user["id"]:
@@ -480,7 +484,7 @@ def rename_category(payload: dict = Body(...), user=Depends(get_current_user)):
     if not old or not new:
         raise HTTPException(422, "Felder 'old' und 'new' sind erforderlich.")
 
-    data = read_db(); ensure_db_shapes(data)
+    data = read_db()
     changed = False
     for l in data["lines"]:
         if l.get("user_id") != user["id"]:

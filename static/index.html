@@ -619,10 +619,15 @@
       border:1px solid var(--border);
       border-radius:16px;
     }
-    .analytics-card canvas{
+    .chart-container{
+      position:relative;
+      height:360px;
+    }
+    .chart-container canvas{
+      position:absolute;
+      inset:0;
       width:100% !important;
-      height:360px !important;
-      display:block;
+      height:100% !important;
     }
 
     /* =========================
@@ -707,6 +712,90 @@
       gap:8px;
       margin-bottom:8px;
     }
+
+    /* =========================
+       ANALYTICS RESPONSIVE
+       ========================= */
+    @media(min-width:900px){
+      .analytics-grid{
+        grid-template-columns:repeat(2,1fr);
+      }
+    }
+
+    /* =========================
+       FOCUS / BARRIEREFREIHEIT
+       ========================= */
+    *:focus-visible{
+      outline:2px solid var(--acc4);
+      outline-offset:2px;
+      border-radius:4px;
+    }
+
+    /* =========================
+       CHECKBOX
+       ========================= */
+    input[type="checkbox"]{
+      width:18px;
+      height:18px;
+      min-width:18px;
+      accent-color:var(--acc4);
+      cursor:pointer;
+    }
+
+    /* =========================
+       LADEINDIKATOR
+       ========================= */
+    .loading-row{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      padding:40px 24px;
+      color:var(--muted);
+      font-size:15px;
+    }
+    @keyframes spin{
+      to{transform:rotate(360deg)}
+    }
+    .spinner{
+      width:22px;
+      height:22px;
+      border:2px solid var(--border);
+      border-top-color:var(--acc4);
+      border-radius:50%;
+      flex-shrink:0;
+      animation:spin .7s linear infinite;
+    }
+
+    /* =========================
+       LEERZUSTAND
+       ========================= */
+    .empty-state{
+      text-align:center;
+      padding:48px 24px;
+      color:var(--muted);
+    }
+    .empty-icon{
+      font-size:48px;
+      line-height:1;
+      margin-bottom:12px;
+    }
+    .empty-state h3{
+      font-size:18px;
+      margin:0 0 8px;
+      color:var(--ink);
+      font-weight:700;
+    }
+    .empty-state p{
+      font-size:14px;
+      margin:0;
+    }
+
+    /* =========================
+       METRIC-FARBEN
+       ========================= */
+    .metric-income .label{ color:var(--acc-income); }
+    .metric-expense .label{ color:var(--acc-expense); }
   </style>
 
   <script>
@@ -716,6 +805,14 @@
     const API_BASE = '';
     function token(){ return localStorage.getItem('hb_token'); }
     function setToken(t){ localStorage.setItem('hb_token', t); }
+
+    // Globaler Alert-Helper – nutzt den App-Dialog wenn verfügbar, sonst Browser-Alert
+    async function hbAlert(msg, title='Hinweis'){
+      if(window.App && typeof window.App.alertMsg === 'function'){
+        return window.App.alertMsg(msg, title);
+      }
+      alert(msg);
+    }
 
     async function authFetch(url, opts={}){
       opts.headers = opts.headers || {};
@@ -751,7 +848,7 @@
             msg = await res.text();
           }
         } catch(e){}
-        alert(msg);
+        await hbAlert(msg, 'Login fehlgeschlagen');
         return;
       }
       const data = await res.json();
@@ -769,11 +866,11 @@
 
     async function doRegister(username, password){
       if(!username || username.trim().length < 3){
-        alert('Benutzername muss mindestens 3 Zeichen haben.');
+        await hbAlert('Benutzername muss mindestens 3 Zeichen haben.');
         return;
       }
       if(!password || password.length < 8){
-        alert('Passwort muss mindestens 8 Zeichen haben.');
+        await hbAlert('Passwort muss mindestens 8 Zeichen haben.');
         return;
       }
       const r = await fetch(API_BASE + '/auth/register', {
@@ -792,7 +889,7 @@
             msg = await r.text();
           }
         } catch(e){}
-        alert(msg);
+        await hbAlert(msg, 'Registrierung fehlgeschlagen');
         return;
       }
       await doLogin(username, password);
@@ -836,12 +933,12 @@
 
       <input id="li_user"
              placeholder="Benutzername"
-             value="thom7e"
              style="margin-bottom:12px;width:100%;" />
 
       <input id="li_pw"
              placeholder="Passwort"
              type="password"
+             onkeydown="if(event.key==='Enter') doLogin(document.getElementById('li_user').value, this.value)"
              style="margin-bottom:16px;width:100%;" />
 
       <div style="display:flex;flex-wrap:wrap;gap:12px;">
@@ -881,13 +978,13 @@
 
     <!-- Metrics -->
     <div class="metrics">
-      <div class="metric card hoverable">
+      <div class="metric card hoverable metric-income">
         <div class="label">Einnahmen</div>
-        <div class="value" x-text="fmt(sumIncome)"></div>
+        <div class="value positive" x-text="fmt(sumIncome)"></div>
       </div>
-      <div class="metric card hoverable">
+      <div class="metric card hoverable metric-expense">
         <div class="label">Ausgaben</div>
-        <div class="value" x-text="fmt(sumExpense)"></div>
+        <div class="value negative" x-text="fmt(sumExpense)"></div>
       </div>
       <div class="metric card hoverable">
         <div class="label">Saldo</div>
@@ -937,8 +1034,24 @@
         </div>
       </div>
 
+      <!-- Ladeindikator -->
+      <div class="loading-row" x-show="loading">
+        <div class="spinner"></div>
+        <span>Daten werden geladen…</span>
+      </div>
+
+      <!-- Leerzustand -->
+      <template x-if="!loading && filteredGroups.length === 0">
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <h3>Keine Einträge</h3>
+          <p x-show="!!(filter.type || filter.category || filter.q)">Keine Einträge für diesen Filter gefunden.</p>
+          <p x-show="!(filter.type || filter.category || filter.q)">Noch keine Einnahmen oder Ausgaben vorhanden.<br>Klicke auf <strong>+ Neu</strong>, um loszulegen.</p>
+        </div>
+      </template>
+
       <!-- Tabelle (<1100px sichtbar) -->
-      <div class="table-view">
+      <div class="table-view" x-show="!loading">
         <div class="table-wrapper">
           <table>
             <thead>
@@ -1028,7 +1141,7 @@
       </div>
 
       <!-- Kanban (>=1100px sichtbar) -->
-      <div class="kanban" style="margin-top:12px">
+      <div class="kanban" style="margin-top:12px" x-show="!loading">
         <div class="kb-board">
           <template x-for="g in filteredGroups" :key="g.type + ':' + g.category">
             <div class="kb-column">
@@ -1088,15 +1201,21 @@
       <div class="analytics-grid">
         <div class="analytics-card">
           <h3 class="muted" style="margin:0 0 8px;font-size:14px;font-weight:600">Ausgaben nach Kategorie</h3>
-          <canvas id="donutByCategory"></canvas>
+          <div class="chart-container">
+            <canvas id="donutByCategory"></canvas>
+          </div>
         </div>
         <div class="analytics-card">
           <h3 class="muted" style="margin:0 0 8px;font-size:14px;font-weight:600">Top-10 Ausgabeposten</h3>
-          <canvas id="top10Expenses"></canvas>
+          <div class="chart-container">
+            <canvas id="top10Expenses"></canvas>
+          </div>
         </div>
         <div class="analytics-card">
           <h3 class="muted" style="margin:0 0 8px;font-size:14px;font-weight:600">Fix vs. Variabel</h3>
-          <canvas id="fixedVsVariable"></canvas>
+          <div class="chart-container">
+            <canvas id="fixedVsVariable"></canvas>
+          </div>
         </div>
       </div>
     </section>
@@ -1122,7 +1241,7 @@
         </template>
 
         <div class="actions">
-          <button type="button" @click="closeDlg()">Abbrechen</button>
+          <button type="button" x-show="dlg.mode !== 'alert'" @click="closeDlg()">Abbrechen</button>
           <button type="button" class="btn-primary" @click="confirmDlg()">OK</button>
         </div>
       </div>
@@ -1278,6 +1397,7 @@
         lines: [],
         groups: [],
         current: null,
+        loading: false,
 
         categoriesServer: [],
         sessionCategories: [],
@@ -1310,15 +1430,17 @@
         },
 
         async load(){
-          const resLines  = await authFetch(this.api + '/api/lines?sort=category');
-          this.lines  = await resLines.json();
-
-          const resGroups = await authFetch(this.api + '/api/groups');
-          this.groups = await resGroups.json();
-
-          await this.loadCategories();
-          this.compute();
-          window.refreshFinanceCharts && window.refreshFinanceCharts();
+          this.loading = true;
+          try {
+            const resGroups = await authFetch(this.api + '/api/groups');
+            this.groups = await resGroups.json();
+            this.lines  = this.groups.flatMap(g => g.lines || []);
+            await this.loadCategories();
+            this.compute();
+            window.refreshFinanceCharts && window.refreshFinanceCharts();
+          } finally {
+            this.loading = false;
+          }
         },
 
         async loadCategories(){
@@ -1377,7 +1499,10 @@
           if (affected > 0){
             const choices = this.mergedCategories.filter(c => c !== cat);
             if (choices.length === 0){
-              const ok = confirm(`"${cat}" hat ${affected} Einträge.\nOhne Ziel werden sie je nach Typ auf Standardkategorien umgehängt. Fortfahren?`);
+              const ok = await this.confirmMsg(
+                `"${cat}" hat ${affected} Einträge.\nOhne Ziel werden sie je nach Typ auf Standardkategorien umgehängt. Fortfahren?`,
+                'Kategorie löschen'
+              );
               if(!ok) return;
             } else {
               target = await this.promptSelect(
@@ -1405,7 +1530,7 @@
                 msg = await res.text();
               }
             }catch(e){}
-            alert(msg);
+            await this.alertMsg(msg, 'Fehler');
             return;
           }
 
@@ -1422,7 +1547,7 @@
           const name = (val||'').trim();
           if (!name || name === oldName) return;
           if (this.mergedCategories.includes(name)){
-            alert('Kategorie existiert bereits.');
+            await this.alertMsg('Diese Kategorie existiert bereits.', 'Duplikat');
             return;
           }
 
@@ -1442,7 +1567,7 @@
                 msg = await res.text();
               }
             }catch(e){}
-            alert(msg);
+            await this.alertMsg(msg, 'Fehler');
             return;
           }
 
@@ -1559,7 +1684,7 @@
               method:'DELETE'
             });
             if(!res.ok){
-              alert('Einzelposten konnte nicht gelöscht werden');
+              await this.alertMsg('Einzelposten konnte nicht gelöscht werden');
               return;
             }
             const updated=await res.json();
@@ -1570,12 +1695,13 @@
         },
         async delCurrent(){
           if(!this.current?.id) return;
-          if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+          const ok = await this.confirmMsg('Diesen Eintrag wirklich löschen?', 'Eintrag löschen');
+          if(!ok) return;
           const res = await authFetch(this.api + '/api/lines/' + this.current.id, {
             method:'DELETE'
           });
           if(!res.ok){
-            alert('Löschen fehlgeschlagen');
+            await this.alertMsg('Löschen fehlgeschlagen');
             return;
           }
           this.close();
@@ -1584,7 +1710,7 @@
 
         async save(){
           if(!this.current.label || !this.current.type || !this.current.category){
-            alert('Bitte Bezeichnung, Typ und Kategorie ausfüllen.');
+            await this.alertMsg('Bitte Bezeichnung, Typ und Kategorie ausfüllen.', 'Pflichtfelder');
             return;
           }
 
@@ -1617,7 +1743,7 @@
                 msg = await res.text();
               }
             }catch(e){}
-            alert(msg);
+            await this.alertMsg(msg, 'Fehler beim Speichern');
             return;
           }
 
@@ -1640,14 +1766,19 @@
         },
         closeDlg(){
           if(this.dlg.resolve){
-            this.dlg.resolve(null);
+            // confirm-Modus: Abbrechen = false; alle anderen = null
+            this.dlg.resolve(this.dlg.mode === 'confirm' ? false : null);
           }
           this.dlg.open=false;
           document.body.classList.remove('no-scroll');
         },
         confirmDlg(){
           if(this.dlg.resolve){
-            this.dlg.resolve(this.dlg.value||'');
+            if(this.dlg.mode === 'alert' || this.dlg.mode === 'confirm'){
+              this.dlg.resolve(true);
+            } else {
+              this.dlg.resolve(this.dlg.value||'');
+            }
           }
           this.dlg.open=false;
           document.body.classList.remove('no-scroll');
@@ -1669,6 +1800,16 @@
               value:def||options[0]||'',
               resolve:res
             });
+          });
+        },
+        alertMsg(message, title='Hinweis'){
+          return new Promise(res=>{
+            this.openDlg({mode:'alert', title, message, value:'', resolve:res});
+          });
+        },
+        confirmMsg(message, title='Bestätigen'){
+          return new Promise(res=>{
+            this.openDlg({mode:'confirm', title, message, value:'', resolve:res});
           });
         },
 

@@ -292,14 +292,17 @@
   window.refreshFinanceCharts = renderAll;
 
   function whenReady(){
-    let tries=0;
-    const t=setInterval(()=>{
-      tries++;
-      if(document.getElementById('donutByCategory') || tries>120){
-        clearInterval(t);
-        renderAll();
-      }
-    },100);
+    if(document.getElementById('donutByCategory')){
+      renderAll();
+    } else {
+      const obs = new MutationObserver(()=>{
+        if(document.getElementById('donutByCategory')){
+          obs.disconnect();
+          renderAll();
+        }
+      });
+      obs.observe(document.body || document.documentElement, {childList:true, subtree:true});
+    }
   }
 
   (document.readyState==='loading')
