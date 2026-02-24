@@ -2,7 +2,7 @@
 <html lang="de" data-theme="auto">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Haushaltsbuch – Startseite</title>
 
   <!-- Fonts & Libs -->
@@ -190,14 +190,9 @@
        ========================= */
     .metrics{
       display:grid;
-      grid-template-columns:1fr;
+      grid-template-columns:repeat(3,1fr);
       gap:12px;
       margin-bottom:16px;
-    }
-    @media(min-width:768px){
-      .metrics{
-        grid-template-columns:repeat(3,1fr);
-      }
     }
 
     .metric{
@@ -349,13 +344,6 @@
       .btn-inline-new{display:none;}
     }
 
-    /* Abstand unten unter 768px,
-       damit FAB nix überlappt */
-    @media(max-width:767px){
-      .wrap{
-        padding-bottom:96px;
-      }
-    }
 
     /* =========================
        TABELLE
@@ -529,6 +517,10 @@
       table {
         min-width:0;
       }
+      /* 12. Gruppen-Header "Zwischensumme:" Text ausblenden */
+      .grp-head-total .label {
+        display:none;
+      }
     }
 
     /* =========================
@@ -656,6 +648,8 @@
       padding:18px;
       max-height:90vh;
       overflow-y:auto;
+      overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
       width:min(720px,calc(100vw - 32px));
     }
 
@@ -796,6 +790,113 @@
        ========================= */
     .metric-income .label{ color:var(--acc-income); }
     .metric-expense .label{ color:var(--acc-expense); }
+
+    /* =========================
+       MOBILE FIRST (≤767px)
+       ========================= */
+    @media(max-width:767px){
+
+      /* 1. iOS-Zoom-Fix: verhindert automatisches Reinzoomen beim Antippen */
+      input:not([type=checkbox]), select {
+        font-size:16px;
+      }
+
+      /* 2. Metrics: kleinere Schrift für 3-Spalten auf engen Screens */
+      .metric {
+        padding:10px 8px;
+        min-height:unset;
+        gap:4px;
+      }
+      .metric .value {
+        font-size:16px;
+      }
+      .metric .label {
+        font-size:11px;
+      }
+
+      /* 3. Wrap-Padding: mehr Breite, genug Abstand für FAB */
+      .wrap {
+        padding:16px 12px 96px;
+      }
+
+      /* 4. Touch-Targets: min. 44px nach Apple HIG */
+      input:not([type=checkbox]), select, button {
+        min-height:44px;
+      }
+
+      /* 5. Bottom Sheet Modal: Editier- und Kategorie-Modal von unten */
+      .modal-overlay:not(.dlg):not(#loginOverlay) {
+        align-items:flex-end;
+        padding:0;
+      }
+      .modal-overlay:not(.dlg):not(#loginOverlay) > .modal {
+        width:100%;
+        border-radius:20px 20px 0 0;
+        max-height:92dvh;
+        padding-bottom:max(24px, env(safe-area-inset-bottom));
+        animation:slideUp .22s ease-out;
+      }
+      /* Handle-Bar als visueller Hinweis */
+      .modal-overlay:not(.dlg):not(#loginOverlay) > .modal::before {
+        content:'';
+        display:block;
+        width:36px;
+        height:4px;
+        border-radius:2px;
+        background:var(--border);
+        margin:0 auto 16px;
+      }
+      @keyframes slideUp {
+        from { transform:translateY(100%); }
+        to   { transform:translateY(0); }
+      }
+
+      /* 6. Modal-Formfelder: Label über Input stapeln */
+      .modal .controls-row:has(> label) {
+        flex-direction:column;
+        gap:4px;
+      }
+      .modal .controls-row > label {
+        font-size:12px;
+        font-weight:600;
+        color:var(--muted);
+        min-width:unset;
+      }
+
+      /* 7. Sub-Row kompakter */
+      .sub-row {
+        grid-template-columns:1fr 90px 36px;
+      }
+
+      /* 8. FAB: Akzentfarbe für bessere Sichtbarkeit */
+      .fab-new {
+        background:var(--acc4);
+        color:var(--bg);
+        border-color:var(--acc4);
+        padding:14px 18px;
+      }
+
+      /* 9. Chart-Höhe: 360px → 220px auf Mobile */
+      .chart-container {
+        height:220px;
+      }
+
+      /* 10. Analytics kompakter */
+      #analytics.card, .analytics-card {
+        padding:12px;
+      }
+
+      /* 11. Tabellen-Zellen kompakter */
+      tbody td, thead th {
+        padding:11px 10px;
+      }
+
+      /* 14. Header kompakter */
+      .title {
+        font-size:20px;
+        margin-bottom:12px;
+      }
+    }
   </style>
 
   <script>
