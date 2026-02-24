@@ -801,17 +801,25 @@
         font-size:16px;
       }
 
-      /* 2. Metrics: kleinere Schrift für 3-Spalten auf engen Screens */
+      /* 2. Metrics: 3-Spalten auf engen Screens */
+      .metrics {
+        gap:8px;
+      }
       .metric {
         padding:10px 8px;
         min-height:unset;
-        gap:4px;
+        gap:3px;
       }
       .metric .value {
-        font-size:16px;
+        font-size:13px;
+        white-space:nowrap;
+        overflow:hidden;
       }
       .metric .label {
         font-size:11px;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
       }
 
       /* 3. Wrap-Padding: mehr Breite, genug Abstand für FAB */
@@ -854,13 +862,15 @@
       /* 6. Modal-Formfelder: Label über Input stapeln */
       .modal .controls-row:has(> label) {
         flex-direction:column;
+        align-items:stretch !important;
         gap:4px;
       }
       .modal .controls-row > label {
         font-size:12px;
         font-weight:600;
         color:var(--muted);
-        min-width:unset;
+        min-width:0 !important;
+        flex:none !important;
       }
 
       /* 7. Sub-Row kompakter */
@@ -1433,17 +1443,17 @@
         <div class="card" style="max-height:50vh;overflow:auto">
           <div class="controls-row" style="font-weight:700;margin-bottom:6px">
             <div style="flex:1">Kategorie</div>
-            <div class="right" style="width:280px;text-align:right">Aktionen</div>
+            <div class="right" style="text-align:right;flex-shrink:0">Aktionen</div>
           </div>
 
           <template x-for="c in managerCategories" :key="'mgr-'+c">
-            <div class="controls-row" style="padding:8px 0;border-top:1px solid var(--border);flex-wrap:nowrap;align-items:flex-start;">
-              <div style="display:flex;align-items:center;gap:8px;flex:1">
+            <div class="controls-row" style="padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:80px">
                 <span class="pill" :style="badgeColor(c)" x-text="c"></span>
               </div>
-              <div class="right" style="display:flex;gap:8px">
-                <button type="button" @click="renameCategory(c)">Umbenennen</button>
-                <button type="button" class="btn-danger" @click="deleteCategoryFlow(c)">Löschen</button>
+              <div style="display:flex;gap:8px;flex-shrink:0">
+                <button type="button" style="width:auto" @click="renameCategory(c)">Umbenennen</button>
+                <button type="button" class="btn-danger" style="width:auto" @click="deleteCategoryFlow(c)">Löschen</button>
               </div>
             </div>
           </template>
