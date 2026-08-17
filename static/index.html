@@ -1717,16 +1717,43 @@
             <h3 class="muted" style="margin:16px 0 6px;font-size:14px;font-weight:600">Dauerauftrag</h3>
 
             <template x-for="r in accountRecurring" :key="r.id">
-              <div class="booking-row" style="align-items:center;">
-                <div style="flex:1;min-width:0;">
-                  <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · jeden ' + r.day_of_month + '. im Monat'"></div>
-                  <div class="muted" style="font-size:12px" x-text="r.line_missing ? '' : ('aktuell ' + fmt(r.line_amount) + ' pro Monat')"></div>
+              <div>
+                <div class="booking-row" style="align-items:center;">
+                  <div style="flex:1;min-width:0;">
+                    <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · jeden ' + r.day_of_month + '. im Monat'"></div>
+                    <div class="muted" style="font-size:12px" x-text="r.line_missing ? '' : ('aktuell ' + fmt(r.line_amount) + ' pro Monat')"></div>
+                  </div>
+                  <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
+                    <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
+                    <span class="muted" style="font-size:12px">aktiv</span>
+                  </label>
+                  <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="editRecurringOpen(r)">✏️</button>
+                  <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteRecurring(r)">🗑️</button>
                 </div>
-                <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
-                  <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
-                  <span class="muted" style="font-size:12px">aktiv</span>
-                </label>
-                <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteRecurring(r)">🗑️</button>
+                <template x-if="editingRecurring?.id === r.id">
+                  <div class="card" style="margin:4px 0 8px;">
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Posten</label>
+                      <select style="flex:1" x-model="editingRecurring.linked_line_id">
+                        <template x-for="l in lines" :key="'er-'+l.id">
+                          <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
+                      <input type="number" min="1" max="28" style="width:90px;" x-model.number="editingRecurring.day_of_month" />
+                    </div>
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
+                      <input type="date" style="flex:1" x-model="editingRecurring.start_date" />
+                    </div>
+                    <div class="controls-row" style="justify-content:flex-end;gap:8px;">
+                      <button type="button" style="flex:0 0 auto;width:auto;" @click="editingRecurring=null">Abbrechen</button>
+                      <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto;" @click="saveRecurring()">Speichern</button>
+                    </div>
+                  </div>
+                </template>
               </div>
             </template>
 
@@ -1841,6 +1868,7 @@
         accountBookings: [],
         accountRecurring: [],
         addRecurringOpen: false,
+        editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
         newRecurring: {linked_line_id:'', day_of_month:1, start_date:''},
 
@@ -2475,6 +2503,30 @@
           this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO()};
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
+        },
+
+        editRecurringOpen(r){
+          this.editingRecurring = {
+            id: r.id,
+            linked_line_id: r.linked_line_id,
+            day_of_month: r.day_of_month,
+            start_date: r.start_date,
+          };
+        },
+
+        async saveRecurring(){
+          const r = this.editingRecurring;
+          const res = await authFetch(this.api + '/api/recurring/' + r.id, {
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              linked_line_id: r.linked_line_id,
+              day_of_month: r.day_of_month,
+              start_date: r.start_date,
+            })
+          });
+          if(!res.ok){ await this.alertMsg('Speichern fehlgeschlagen'); return; }
+          this.editingRecurring = null;
+          await this.loadAccountDetail(this.currentAccount.id);
         },
 
         async toggleRecurring(r){
