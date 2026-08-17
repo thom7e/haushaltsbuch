@@ -309,6 +309,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: str
     username: str
+    email: str = ""
 
 class TokenOut(BaseModel):
     access_token: str
@@ -344,6 +345,16 @@ def migrate_attach_orphans():
     if changed:
         write_db(data)
 
+def migrate_add_email_field():
+    data = read_db()
+    changed = False
+    for u in data["users"]:
+        if "email" not in u:
+            u["email"] = ""
+            changed = True
+    if changed:
+        write_db(data)
+
 # =========================================
 #                   APP
 # =========================================
@@ -353,6 +364,7 @@ async def lifespan(app_: FastAPI):
     write_db(migrate_db(read_db()))
     migrate_add_default_user()
     migrate_attach_orphans()
+    migrate_add_email_field()
     d = read_db()
     print(f"[STARTUP] DB={DB_PATH} users={len(d['users'])} lines={len(d['lines'])}")
     yield
@@ -387,11 +399,12 @@ def register(u: UserCreate):
     data["users"].append({
         "id": uid,
         "username": u.username,
+        "email": "",
         "password_hash": hash_pw(u.password),
         "created_at": int(time.time()),
     })
     write_db(data)
-    return {"id": uid, "username": u.username}
+    return {"id": uid, "username": u.username, "email": ""}
 
 @app.post("/auth/login", response_model=TokenOut)
 def login(u: UserCreate):
