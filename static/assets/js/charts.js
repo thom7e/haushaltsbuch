@@ -269,6 +269,46 @@
     });
   }
 
+  // --------- Sparkline (Konten-Übersicht) ---------
+  function drawSparkline(canvas, values){
+    if (!canvas) return;
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width || 110;
+    const h = rect.height || 32;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    let vals = (Array.isArray(values) && values.length) ? values.slice() : [0];
+    if (vals.length === 1) vals = [vals[0], vals[0]];
+
+    const min = Math.min(...vals, 0);
+    const max = Math.max(...vals, 0);
+    const range = (max - min) || 1;
+    const pad = 3;
+
+    const P = paletteFromCSS();
+    const positive = vals[vals.length - 1] >= vals[0];
+    const color = positive ? (P.acc[0] || '#9AD0A1') : '#E3897D';
+
+    const stepX = (w - pad * 2) / (vals.length - 1);
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const x = pad + i * stepX;
+      const y = pad + (h - pad * 2) - ((v - min) / range) * (h - pad * 2);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.75;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+  window.drawSparkline = drawSparkline;
+
   // --------- Redraw orchestration ---------
   function renderAll(){
     const lines = linesFromApp();

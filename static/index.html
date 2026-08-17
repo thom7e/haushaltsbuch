@@ -922,6 +922,112 @@
         margin-bottom:12px;
       }
     }
+
+    /* =========================
+       TAB-NAVIGATION
+       ========================= */
+    .tabbar{
+      display:flex;
+      gap:8px;
+      margin-bottom:16px;
+    }
+    .tabbar button{
+      width:auto;
+      padding:8px 16px;
+      border-radius:999px;
+      font-weight:600;
+    }
+    .tabbar button.active{
+      background:var(--hover-strong);
+      border-color:var(--ink);
+    }
+
+    /* =========================
+       KONTEN-ÜBERSICHT
+       ========================= */
+    .accounts-header{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .accounts-header .total{
+      margin-left:auto;
+      font-size:20px;
+      font-weight:800;
+    }
+    .accounts-header button{
+      width:auto;
+      padding:8px 14px;
+    }
+    .account-row{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      padding:14px 4px;
+      border-top:1px solid var(--border);
+      cursor:pointer;
+    }
+    .account-row:first-child{ border-top:none; }
+    .account-icon{
+      width:40px;
+      height:40px;
+      border-radius:12px;
+      background:var(--panel-2);
+      border:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:19px;
+      flex:0 0 auto;
+    }
+    .account-info{
+      flex:1 1 auto;
+      min-width:0;
+    }
+    .account-name{
+      font-weight:600;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .account-institute{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .account-spark{
+      width:110px;
+      height:32px;
+      flex:0 0 auto;
+      display:block;
+    }
+    .account-balance{
+      font-weight:700;
+      min-width:100px;
+      text-align:right;
+      flex:0 0 auto;
+    }
+    @media(max-width:600px){
+      .account-spark{ display:none; }
+    }
+
+    /* =========================
+       KONTODETAIL
+       ========================= */
+    .booking-row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:9px 0;
+      border-top:1px solid var(--border);
+      font-size:14px;
+    }
+    .booking-row:first-child{ border-top:none; }
+    .booking-date{ color:var(--muted); font-size:12px; min-width:78px; }
+    .booking-note{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .booking-amount{ font-weight:700; flex:0 0 auto; }
+    .booking-amount.positive{ color:var(--acc-income); }
+    .booking-amount.negative{ color:var(--acc-expense); }
   </style>
 
   <script>
@@ -1090,7 +1196,7 @@
   <div class="wrap">
     <!-- Header -->
     <h1 class="title">
-      🏠 Haushaltsbuch
+      <span x-text="tab==='konten' ? '🏦 Konten' : '🏠 Haushaltsbuch'"></span>
       <button id="themeToggle"
               type="button"
               class="right"
@@ -1102,6 +1208,14 @@
       </button>
     </h1>
 
+    <!-- Tab-Navigation -->
+    <div class="tabbar">
+      <button type="button" :class="{active: tab==='buch'}" @click="switchTab('buch')">Haushaltsbuch</button>
+      <button type="button" :class="{active: tab==='konten'}" @click="switchTab('konten')">Konten</button>
+    </div>
+
+    <template x-if="tab==='buch'">
+    <div>
     <!-- Metrics -->
     <div class="metrics">
       <div class="metric card hoverable metric-income">
@@ -1345,6 +1459,45 @@
         </div>
       </div>
     </section>
+    </div>
+    </template>
+
+    <!-- ======= Tab: Konten ======= -->
+    <template x-if="tab==='konten'">
+    <div>
+      <div class="card">
+        <div class="accounts-header">
+          <button type="button" @click="newAccountModal()">+ Konto</button>
+          <span class="total" x-text="fmt(accountsTotal)"></span>
+        </div>
+
+        <div class="loading-row" x-show="accountsLoading">
+          <div class="spinner"></div>
+          <span>Konten werden geladen…</span>
+        </div>
+
+        <template x-if="!accountsLoading && accounts.length === 0">
+          <div class="empty-state">
+            <div class="empty-icon">🏦</div>
+            <h3>Keine Konten</h3>
+            <p>Noch keine Unterkonten angelegt.<br>Klicke auf <strong>+ Konto</strong>, um loszulegen.</p>
+          </div>
+        </template>
+
+        <template x-for="a in accounts" :key="a.id">
+          <div class="account-row" @click="openAccountModal(a)">
+            <div class="account-icon" x-text="a.icon || '🏦'"></div>
+            <div class="account-info">
+              <div class="account-name" x-text="a.name"></div>
+              <div class="account-institute" x-text="a.institute"></div>
+            </div>
+            <canvas class="account-spark" :id="'spark-'+a.id"></canvas>
+            <div class="account-balance" x-text="fmt(a.balance)"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+    </template>
   </div>
 
   <!-- ======= Universal Dialog ======= -->
@@ -1489,6 +1642,114 @@
     </div>
   </template>
 
+  <!-- ======= Modal: Konto anlegen / bearbeiten ======= -->
+  <template x-if="currentAccount">
+    <div class="modal-overlay" @click.self="sheetClose($event, () => closeAccountModal())">
+      <div class="modal" @keydown.escape.window="sheetClose($event, () => closeAccountModal())">
+        <div class="sheet-handle"
+             @touchstart.passive="dragStart($event, () => closeAccountModal())"
+             @touchmove.prevent="dragMove($event)"
+             @touchend="dragEnd($event)"></div>
+        <h3 x-text="currentAccount.id ? 'Konto bearbeiten' : 'Neues Konto'"></h3>
+
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Name</label>
+          <input style="flex:1" placeholder="z. B. Autorücklagen" x-model="currentAccount.name" />
+        </div>
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Institut</label>
+          <input style="flex:1" placeholder="z. B. Trade Republic" x-model="currentAccount.institute" />
+        </div>
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Icon</label>
+          <input style="flex:0 0 auto;width:70px;" maxlength="2" x-model="currentAccount.icon" />
+        </div>
+
+        <div class="controls-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
+          <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="saveAccount()">Speichern</button>
+          <template x-if="currentAccount?.id">
+            <button type="button" class="btn-danger" style="flex:0 0 auto;width:auto" @click="deleteAccount()">Löschen</button>
+          </template>
+          <button type="button" style="flex:0 0 auto;width:auto" @click="sheetClose($event, () => closeAccountModal())">Schließen</button>
+        </div>
+
+        <template x-if="currentAccount?.id">
+          <div>
+            <!-- Dauerauftrag -->
+            <h3 class="muted" style="margin:16px 0 6px;font-size:14px;font-weight:600">Dauerauftrag</h3>
+
+            <template x-for="r in accountRecurring" :key="r.id">
+              <div class="booking-row" style="align-items:center;">
+                <div style="flex:1;min-width:0;">
+                  <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · jeden ' + r.day_of_month + '. im Monat'"></div>
+                  <div class="muted" style="font-size:12px" x-text="r.line_missing ? '' : ('aktuell ' + fmt(r.line_amount) + ' pro Monat')"></div>
+                </div>
+                <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
+                  <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
+                  <span class="muted" style="font-size:12px">aktiv</span>
+                </label>
+                <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteRecurring(r)">🗑️</button>
+              </div>
+            </template>
+
+            <template x-if="accountRecurring.length===0 || addRecurringOpen">
+              <div class="card" style="margin-top:8px;">
+                <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                  <label style="min-width:120px;flex:0 0 auto;">Posten</label>
+                  <select style="flex:1" x-model="newRecurring.linked_line_id">
+                    <option value="">Bitte wählen…</option>
+                    <template x-for="l in lines" :key="'rl-'+l.id">
+                      <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                  <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
+                  <input type="number" min="1" max="28" style="width:90px;" x-model.number="newRecurring.day_of_month" />
+                </div>
+                <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                  <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
+                  <input type="date" style="flex:1" x-model="newRecurring.start_date" />
+                </div>
+                <div class="controls-row" style="justify-content:flex-end;">
+                  <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="addRecurring()">Dauerauftrag anlegen</button>
+                </div>
+              </div>
+            </template>
+            <button type="button" x-show="accountRecurring.length>0 && !addRecurringOpen" style="width:auto;margin-top:8px;" @click="addRecurringOpen=true">+ weiteren Dauerauftrag</button>
+
+            <!-- Buchungen -->
+            <h3 class="muted" style="margin:16px 0 6px;font-size:14px;font-weight:600">Buchungen</h3>
+
+            <div class="card" style="margin-bottom:8px;">
+              <div class="controls-row" style="gap:8px;flex-wrap:wrap;align-items:flex-start;">
+                <input type="date" style="flex:1;min-width:140px" x-model="newBooking.date" />
+                <input type="number" step="0.01" placeholder="Betrag (z.B. -20)" style="flex:1;min-width:140px" x-model.number="newBooking.amount" />
+                <input placeholder="Notiz" style="flex:1;min-width:140px" x-model="newBooking.note" />
+                <button type="button" style="flex:0 0 auto;width:auto" @click="addBooking()">+ Buchung</button>
+              </div>
+            </div>
+
+            <div style="max-height:30vh;overflow:auto;">
+              <template x-if="accountBookings.length===0">
+                <p class="muted" style="font-size:13px;">Noch keine Buchungen.</p>
+              </template>
+              <template x-for="b in accountBookings" :key="b.id">
+                <div class="booking-row">
+                  <span class="booking-date" x-text="b.date"></span>
+                  <span class="booking-note" x-text="b.note || (b.source==='recurring' ? 'Automatisch' : '')"></span>
+                  <span class="pill" x-show="b.source==='recurring'">Automatisch</span>
+                  <span class="booking-amount" :class="b.amount>=0?'positive':'negative'" x-text="fmt(b.amount)"></span>
+                  <button type="button" x-show="b.source==='manual'" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteBooking(b)">🗑️</button>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
   <!-- Theme Switcher init -->
   <script>
     (function(){
@@ -1528,10 +1789,22 @@
         api: (localStorage.getItem('hb_api') || window.location.origin),
 
         // ---- State ----
+        tab: 'buch',
         lines: [],
         groups: [],
         current: null,
         loading: false,
+
+        // ---- Konten-State ----
+        accounts: [],
+        accountsTotal: 0,
+        accountsLoading: false,
+        currentAccount: null,
+        accountBookings: [],
+        accountRecurring: [],
+        addRecurringOpen: false,
+        newBooking: {date:'', amount:null, note:''},
+        newRecurring: {linked_line_id:'', day_of_month:1, start_date:''},
 
         categoriesServer: [],
         sessionCategories: [],
@@ -1548,6 +1821,7 @@
 
         async init(){
           window.App = this;
+          document.addEventListener('themechange', ()=>{ this.drawSparklines(); });
           if (localStorage.getItem('hb_token')) {
             await this.loadBootstrap();
           } else {
@@ -1557,6 +1831,11 @@
               document.body.classList.add('no-scroll');
             }
           }
+        },
+
+        switchTab(t){
+          this.tab = t;
+          if (t === 'konten') this.loadAccounts();
         },
 
         async loadBootstrap(){
@@ -2005,6 +2284,150 @@
             modal.style.transition = 'transform .35s cubic-bezier(.34,1.56,.64,1)';
             modal.style.transform  = 'translateY(0)';
             setTimeout(()=>{ modal.style.transform=''; modal.style.transition=''; }, 350);
+          }
+        },
+
+        /* ================= Konten ================= */
+        async loadAccounts(){
+          this.accountsLoading = true;
+          try{
+            const r = await authFetch(this.api + '/api/accounts');
+            const data = await r.json();
+            this.accounts = data.accounts || [];
+            this.accountsTotal = data.total || 0;
+          } finally {
+            this.accountsLoading = false;
+            this.$nextTick(()=> this.drawSparklines());
+          }
+        },
+
+        drawSparklines(){
+          if (typeof window.drawSparkline !== 'function') return;
+          this.accounts.forEach(a=>{
+            const cv = document.getElementById('spark-'+a.id);
+            if (cv) window.drawSparkline(cv, a.sparkline || []);
+          });
+        },
+
+        todayISO(){
+          return new Date().toISOString().slice(0,10);
+        },
+
+        openAccountModal(a){
+          this.currentAccount = JSON.parse(JSON.stringify(a));
+          this.accountBookings = [];
+          this.accountRecurring = [];
+          this.addRecurringOpen = false;
+          this.newBooking = {date: this.todayISO(), amount:null, note:''};
+          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO()};
+          document.body.classList.add('no-scroll');
+          if (a.id) this.loadAccountDetail(a.id);
+        },
+        newAccountModal(){
+          this.openAccountModal({id:null, name:'', institute:'', icon:'🏦'});
+        },
+        closeAccountModal(){
+          this.currentAccount = null;
+          document.body.classList.remove('no-scroll');
+        },
+
+        async loadAccountDetail(id){
+          const [bRes, rRes] = await Promise.all([
+            authFetch(this.api + '/api/accounts/' + id + '/bookings'),
+            authFetch(this.api + '/api/accounts/' + id + '/recurring'),
+          ]);
+          this.accountBookings = await bRes.json();
+          this.accountRecurring = await rRes.json();
+        },
+
+        async saveAccount(){
+          if(!this.currentAccount.name || !this.currentAccount.name.trim()){
+            await this.alertMsg('Bitte einen Namen angeben.', 'Pflichtfeld');
+            return;
+          }
+          const hasId = !!this.currentAccount.id;
+          const url = this.api + (hasId ? '/api/accounts/' + this.currentAccount.id : '/api/accounts');
+          const method = hasId ? 'PUT' : 'POST';
+          const payload = {
+            name: this.currentAccount.name,
+            institute: this.currentAccount.institute || '',
+            icon: this.currentAccount.icon || '🏦',
+          };
+          const res = await authFetch(url, {
+            method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+          });
+          if(!res.ok){ await this.alertMsg('Speichern fehlgeschlagen'); return; }
+          const saved = await res.json();
+          if(!hasId){
+            this.closeAccountModal();
+          } else {
+            this.currentAccount = Object.assign({}, this.currentAccount, saved);
+          }
+          await this.loadAccounts();
+        },
+
+        async deleteAccount(){
+          if(!this.currentAccount?.id) return;
+          const ok = await this.confirmMsg('Konto inkl. aller Buchungen und Daueraufträge wirklich löschen?', 'Konto löschen');
+          if(!ok) return;
+          const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id, {method:'DELETE'});
+          if(!res.ok){ await this.alertMsg('Löschen fehlgeschlagen'); return; }
+          this.closeAccountModal();
+          await this.loadAccounts();
+        },
+
+        async addBooking(){
+          if(!this.currentAccount?.id) return;
+          const amt = Number(this.newBooking.amount);
+          if(!amt){ await this.alertMsg('Bitte einen Betrag ungleich 0 eingeben.', 'Pflichtfeld'); return; }
+          const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/bookings', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({date: this.newBooking.date || this.todayISO(), amount: amt, note: this.newBooking.note || ''})
+          });
+          if(!res.ok){ await this.alertMsg('Buchung konnte nicht gespeichert werden'); return; }
+          this.newBooking = {date: this.todayISO(), amount:null, note:''};
+          await this.loadAccountDetail(this.currentAccount.id);
+          await this.loadAccounts();
+        },
+
+        async deleteBooking(b){
+          const ok = await this.confirmMsg('Buchung löschen?', 'Buchung löschen');
+          if(!ok) return;
+          const res = await authFetch(this.api + '/api/bookings/' + b.id, {method:'DELETE'});
+          if(!res.ok){ await this.alertMsg('Löschen fehlgeschlagen'); return; }
+          await this.loadAccountDetail(this.currentAccount.id);
+          await this.loadAccounts();
+        },
+
+        async addRecurring(){
+          if(!this.currentAccount?.id) return;
+          if(!this.newRecurring.linked_line_id){ await this.alertMsg('Bitte einen Posten aus dem Haushaltsbuch wählen.', 'Pflichtfeld'); return; }
+          const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/recurring', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(this.newRecurring)
+          });
+          if(!res.ok){ await this.alertMsg('Dauerauftrag konnte nicht gespeichert werden'); return; }
+          this.addRecurringOpen = false;
+          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO()};
+          await this.loadAccountDetail(this.currentAccount.id);
+          await this.loadAccounts();
+        },
+
+        async toggleRecurring(r){
+          const res = await authFetch(this.api + '/api/recurring/' + r.id, {
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({active: !r.active})
+          });
+          if(res.ok) await this.loadAccountDetail(this.currentAccount.id);
+        },
+
+        async deleteRecurring(r){
+          const ok = await this.confirmMsg('Dauerauftrag wirklich löschen?', 'Dauerauftrag löschen');
+          if(!ok) return;
+          const res = await authFetch(this.api + '/api/recurring/' + r.id, {method:'DELETE'});
+          if(res.ok){
+            await this.loadAccountDetail(this.currentAccount.id);
+            await this.loadAccounts();
           }
         },
       }

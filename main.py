@@ -6,7 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from passlib.context import CryptContext
 import json, os, uuid, time, shutil, threading
 import jwt  # PyJWT
@@ -42,13 +42,16 @@ def _atomic_write(path: str, payload: dict):
     os.replace(tmp, path)
 
 def _empty_db() -> dict:
-    return {"lines": [], "users": [], "version": 1}
+    return {"lines": [], "users": [], "accounts": [], "bookings": [], "recurring_rules": [], "version": 1}
 
 def ensure_db_shapes(data: dict) -> dict:
     if not isinstance(data, dict):
         data = {}
     data.setdefault("lines", [])
     data.setdefault("users", [])
+    data.setdefault("accounts", [])
+    data.setdefault("bookings", [])
+    data.setdefault("recurring_rules", [])
     data.setdefault("version", 1)
     return data
 
@@ -110,14 +113,153 @@ def normalize_line(raw: dict) -> dict:
     l["is_variable"] = v if v in (True, False, None) else None
     return l
 
+def normalize_account(raw: dict, user_id: Optional[str] = None) -> dict:
+    a = dict(raw) if raw else {}
+    a["id"] = a.get("id") or str(uuid.uuid4())
+    a["user_id"] = a.get("user_id") or user_id
+    a["name"] = (a.get("name") or "").strip()
+    a["institute"] = a.get("institute") or ""
+    a["icon"] = a.get("icon") or "🏦"
+    try:
+        a["sort_order"] = float(a.get("sort_order") or 0)
+    except (TypeError, ValueError):
+        a["sort_order"] = 0.0
+    a["archived"] = bool(a.get("archived", False))
+    return a
+
+def normalize_booking(raw: dict, account_id: Optional[str] = None) -> dict:
+    b = dict(raw) if raw else {}
+    b["id"] = b.get("id") or str(uuid.uuid4())
+    b["account_id"] = b.get("account_id") or account_id
+    d = b.get("date")
+    try:
+        date.fromisoformat(d)
+    except (TypeError, ValueError):
+        d = date.today().isoformat()
+    b["date"] = d
+    try:
+        b["amount"] = float(b.get("amount") or 0)
+    except (TypeError, ValueError):
+        b["amount"] = 0.0
+    b["note"] = b.get("note") or ""
+    b["source"] = b.get("source") if b.get("source") in ("manual", "recurring") else "manual"
+    b["recurring_rule_id"] = b.get("recurring_rule_id")
+    return b
+
+def normalize_recurring_rule(raw: dict, account_id: Optional[str] = None) -> dict:
+    r = dict(raw) if raw else {}
+    r["id"] = r.get("id") or str(uuid.uuid4())
+    r["account_id"] = r.get("account_id") or account_id
+    r["linked_line_id"] = r.get("linked_line_id")
+    try:
+        dom = int(r.get("day_of_month") or 1)
+    except (TypeError, ValueError):
+        dom = 1
+    r["day_of_month"] = min(max(dom, 1), 28)
+    r["active"] = bool(r.get("active", True))
+    sd = r.get("start_date")
+    try:
+        date.fromisoformat(sd)
+    except (TypeError, ValueError):
+        sd = date.today().isoformat()
+    r["start_date"] = sd
+    ed = r.get("end_date")
+    if ed:
+        try:
+            date.fromisoformat(ed)
+        except (TypeError, ValueError):
+            ed = None
+    r["end_date"] = ed
+    return r
+
 def migrate_db(data: dict) -> dict:
     data = ensure_db_shapes(data)
     new_lines = [normalize_line(l) for l in data.get("lines", [])]
-    if new_lines != data.get("lines") or "version" not in data:
-        data["lines"]   = new_lines
+    new_accounts = [normalize_account(a) for a in data.get("accounts", [])]
+    new_bookings = [normalize_booking(b) for b in data.get("bookings", [])]
+    new_rules = [normalize_recurring_rule(r) for r in data.get("recurring_rules", [])]
+    changed = (
+        new_lines != data.get("lines")
+        or new_accounts != data.get("accounts")
+        or new_bookings != data.get("bookings")
+        or new_rules != data.get("recurring_rules")
+        or "version" not in data
+    )
+    if changed:
+        data["lines"] = new_lines
+        data["accounts"] = new_accounts
+        data["bookings"] = new_bookings
+        data["recurring_rules"] = new_rules
         data["version"] = 1
         write_db(data)
     return data
+
+def account_deposit_amount(line: dict) -> float:
+    return abs(total_of_line(normalize_line(line)))
+
+def run_recurring_catchup(user_id: str, data: dict) -> bool:
+    """Erzeugt fehlende automatische Buchungen für aktive Daueraufträge des Users.
+    Mutiert `data` in place. Gibt True zurück, wenn etwas geändert wurde."""
+    today = date.today()
+    accounts_by_id = {a["id"]: a for a in data["accounts"] if a.get("user_id") == user_id}
+    lines_by_id = {l["id"]: l for l in data["lines"] if l.get("user_id") == user_id}
+    changed = False
+
+    for idx, raw_rule in enumerate(data["recurring_rules"]):
+        if raw_rule.get("account_id") not in accounts_by_id:
+            continue
+        rule = normalize_recurring_rule(raw_rule)
+        data["recurring_rules"][idx] = rule
+        if rule != raw_rule:
+            changed = True
+        if not rule["active"]:
+            continue
+
+        line = lines_by_id.get(rule["linked_line_id"])
+        if not line:
+            rule["active"] = False
+            changed = True
+            continue
+
+        try:
+            start = date.fromisoformat(rule["start_date"])
+        except ValueError:
+            continue
+        end = None
+        if rule.get("end_date"):
+            try:
+                end = date.fromisoformat(rule["end_date"])
+            except ValueError:
+                end = None
+
+        existing_months = set()
+        for b in data["bookings"]:
+            if b.get("recurring_rule_id") == rule["id"]:
+                try:
+                    bd = date.fromisoformat(b.get("date"))
+                    existing_months.add((bd.year, bd.month))
+                except (ValueError, TypeError):
+                    pass
+
+        y, m = start.year, start.month
+        while (y, m) <= (today.year, today.month):
+            occurrence = date(y, m, rule["day_of_month"])
+            in_range = occurrence >= start and occurrence <= today and (end is None or occurrence <= end)
+            if in_range and (y, m) not in existing_months:
+                booking = normalize_booking({
+                    "date": occurrence.isoformat(),
+                    "amount": account_deposit_amount(line),
+                    "note": line.get("label") or "",
+                    "source": "recurring",
+                    "recurring_rule_id": rule["id"],
+                }, account_id=rule["account_id"])
+                data["bookings"].append(booking)
+                changed = True
+            m += 1
+            if m > 12:
+                y, m = y + 1, 1
+
+    return changed
 
 # =========================================
 #                  AUTH
@@ -494,4 +636,234 @@ def rename_category(payload: dict = Body(...), user=Depends(get_current_user)):
             changed = True
     if changed:
         write_db(data)
+    return {"ok": True}
+
+# =========================================
+#            KONTEN / UNTERKONTEN
+# =========================================
+
+def _require_account(data: dict, account_id: str, user_id: str) -> dict:
+    acc = next((a for a in data["accounts"] if a.get("id") == account_id and a.get("user_id") == user_id), None)
+    if not acc:
+        raise HTTPException(404, "Konto nicht gefunden")
+    return acc
+
+@app.get("/api/accounts")
+def list_accounts(user=Depends(get_current_user)):
+    data = read_db()
+    if run_recurring_catchup(user["id"], data):
+        write_db(data)
+
+    accounts = [normalize_account(a) for a in data["accounts"] if a.get("user_id") == user["id"] and not a.get("archived")]
+    accounts.sort(key=lambda a: (a.get("sort_order", 0), a.get("name", "").lower()))
+
+    out = []
+    total = 0.0
+    for a in accounts:
+        bks = sorted(
+            (normalize_booking(b) for b in data["bookings"] if b.get("account_id") == a["id"]),
+            key=lambda b: (b["date"], b["id"]),
+        )
+        running = 0.0
+        spark = []
+        for b in bks:
+            running += b["amount"]
+            spark.append(round(running, 2))
+        balance = round(running, 2)
+        total += balance
+        out.append({**a, "balance": balance, "sparkline": spark[-30:], "bookings_count": len(bks)})
+
+    return {"accounts": out, "total": round(total, 2)}
+
+@app.post("/api/accounts")
+def create_account(payload: dict = Body(...), user=Depends(get_current_user)):
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(422, "Feld 'name' ist erforderlich.")
+    data = read_db()
+    acc = normalize_account({
+        "name": name,
+        "institute": payload.get("institute"),
+        "icon": payload.get("icon"),
+        "sort_order": payload.get("sort_order"),
+    }, user_id=user["id"])
+    data["accounts"].append(acc)
+    write_db(data)
+    return acc
+
+@app.put("/api/accounts/{account_id}")
+def update_account(account_id: str, payload: dict = Body(...), user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, a in enumerate(data["accounts"]) if a.get("id") == account_id and a.get("user_id") == user["id"]), -1)
+    if idx < 0:
+        raise HTTPException(404, "Konto nicht gefunden")
+    cur = data["accounts"][idx]
+    if "name" in payload:
+        name = str(payload.get("name") or "").strip()
+        if name:
+            cur["name"] = name
+    if "institute" in payload:
+        cur["institute"] = payload.get("institute") or ""
+    if "icon" in payload:
+        cur["icon"] = payload.get("icon") or "🏦"
+    if "sort_order" in payload:
+        try:
+            cur["sort_order"] = float(payload.get("sort_order") or 0)
+        except (TypeError, ValueError):
+            pass
+    if "archived" in payload:
+        cur["archived"] = bool(payload.get("archived"))
+    cur["user_id"] = user["id"]
+    data["accounts"][idx] = cur
+    write_db(data)
+    return cur
+
+@app.delete("/api/accounts/{account_id}")
+def delete_account(account_id: str, user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, a in enumerate(data["accounts"]) if a.get("id") == account_id and a.get("user_id") == user["id"]), -1)
+    if idx < 0:
+        raise HTTPException(404, "Konto nicht gefunden")
+    data["accounts"].pop(idx)
+    data["bookings"] = [b for b in data["bookings"] if b.get("account_id") != account_id]
+    data["recurring_rules"] = [r for r in data["recurring_rules"] if r.get("account_id") != account_id]
+    write_db(data)
+    return {"ok": True}
+
+@app.get("/api/accounts/{account_id}/bookings")
+def list_bookings(account_id: str, user=Depends(get_current_user)):
+    data = read_db()
+    _require_account(data, account_id, user["id"])
+    if run_recurring_catchup(user["id"], data):
+        write_db(data)
+    bks = sorted(
+        (normalize_booking(b) for b in data["bookings"] if b.get("account_id") == account_id),
+        key=lambda b: b["date"],
+        reverse=True,
+    )
+    return bks
+
+@app.post("/api/accounts/{account_id}/bookings")
+def create_booking(account_id: str, payload: dict = Body(...), user=Depends(get_current_user)):
+    data = read_db()
+    _require_account(data, account_id, user["id"])
+    try:
+        amount = float(payload.get("amount"))
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Feld 'amount' ist erforderlich und muss eine Zahl sein.")
+    if amount == 0:
+        raise HTTPException(422, "Betrag darf nicht 0 sein.")
+    b = normalize_booking({
+        "date": payload.get("date"),
+        "amount": amount,
+        "note": payload.get("note"),
+        "source": "manual",
+    }, account_id=account_id)
+    data["bookings"].append(b)
+    write_db(data)
+    return b
+
+@app.delete("/api/bookings/{booking_id}")
+def delete_booking(booking_id: str, user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, b in enumerate(data["bookings"]) if b.get("id") == booking_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Buchung nicht gefunden")
+    acc = next((a for a in data["accounts"] if a.get("id") == data["bookings"][idx].get("account_id")), None)
+    if not acc or acc.get("user_id") != user["id"]:
+        raise HTTPException(404, "Buchung nicht gefunden")
+    data["bookings"].pop(idx)
+    write_db(data)
+    return {"ok": True}
+
+@app.get("/api/accounts/{account_id}/recurring")
+def list_recurring(account_id: str, user=Depends(get_current_user)):
+    data = read_db()
+    _require_account(data, account_id, user["id"])
+    rules = [normalize_recurring_rule(r) for r in data["recurring_rules"] if r.get("account_id") == account_id]
+    lines_by_id = {l["id"]: l for l in data["lines"] if l.get("user_id") == user["id"]}
+    out = []
+    for r in rules:
+        line = lines_by_id.get(r["linked_line_id"])
+        out.append({
+            **r,
+            "line_label": line.get("label") if line else None,
+            "line_amount": account_deposit_amount(line) if line else None,
+            "line_missing": line is None,
+        })
+    return out
+
+@app.post("/api/accounts/{account_id}/recurring")
+def create_recurring(account_id: str, payload: dict = Body(...), user=Depends(get_current_user)):
+    data = read_db()
+    _require_account(data, account_id, user["id"])
+    line = next((l for l in data["lines"] if l.get("id") == payload.get("linked_line_id") and l.get("user_id") == user["id"]), None)
+    if not line:
+        raise HTTPException(422, "Gültige 'linked_line_id' ist erforderlich.")
+    r = normalize_recurring_rule({
+        "linked_line_id": line["id"],
+        "day_of_month": payload.get("day_of_month"),
+        "active": payload.get("active", True),
+        "start_date": payload.get("start_date"),
+        "end_date": payload.get("end_date"),
+    }, account_id=account_id)
+    data["recurring_rules"].append(r)
+    write_db(data)
+    return r
+
+@app.put("/api/recurring/{rule_id}")
+def update_recurring(rule_id: str, payload: dict = Body(...), user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, r in enumerate(data["recurring_rules"]) if r.get("id") == rule_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Dauerauftrag nicht gefunden")
+    cur = data["recurring_rules"][idx]
+    acc = next((a for a in data["accounts"] if a.get("id") == cur.get("account_id")), None)
+    if not acc or acc.get("user_id") != user["id"]:
+        raise HTTPException(404, "Dauerauftrag nicht gefunden")
+
+    if "linked_line_id" in payload:
+        line = next((l for l in data["lines"] if l.get("id") == payload.get("linked_line_id") and l.get("user_id") == user["id"]), None)
+        if not line:
+            raise HTTPException(422, "Gültige 'linked_line_id' ist erforderlich.")
+        cur["linked_line_id"] = line["id"]
+    if "day_of_month" in payload:
+        try:
+            cur["day_of_month"] = min(max(int(payload.get("day_of_month")), 1), 28)
+        except (TypeError, ValueError):
+            pass
+    if "active" in payload:
+        cur["active"] = bool(payload.get("active"))
+    if "start_date" in payload:
+        try:
+            date.fromisoformat(payload.get("start_date"))
+            cur["start_date"] = payload.get("start_date")
+        except (TypeError, ValueError):
+            pass
+    if "end_date" in payload:
+        ed = payload.get("end_date")
+        if ed:
+            try:
+                date.fromisoformat(ed)
+                cur["end_date"] = ed
+            except (TypeError, ValueError):
+                pass
+        else:
+            cur["end_date"] = None
+
+    data["recurring_rules"][idx] = cur
+    write_db(data)
+    return cur
+
+@app.delete("/api/recurring/{rule_id}")
+def delete_recurring(rule_id: str, user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, r in enumerate(data["recurring_rules"]) if r.get("id") == rule_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Dauerauftrag nicht gefunden")
+    acc = next((a for a in data["accounts"] if a.get("id") == data["recurring_rules"][idx].get("account_id")), None)
+    if not acc or acc.get("user_id") != user["id"]:
+        raise HTTPException(404, "Dauerauftrag nicht gefunden")
+    data["recurring_rules"].pop(idx)
+    write_db(data)
     return {"ok": True}
