@@ -1197,15 +1197,23 @@
     <!-- Header -->
     <h1 class="title">
       <span x-text="tab==='konten' ? '🏦 Konten' : '🏠 Haushaltsbuch'"></span>
-      <button id="themeToggle"
-              type="button"
-              class="right"
-              title="Theme wechseln"
-              style="display:flex;gap:8px;align-items:center"
-              @click="window.toggleTheme()">
-        <span id="themeIcon" aria-hidden="true">🌙</span>
-        <span class="muted" id="themeLabel">Dark</span>
-      </button>
+      <div class="right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button id="themeToggle"
+                type="button"
+                title="Theme wechseln"
+                style="width:auto;display:flex;gap:8px;align-items:center"
+                @click="window.toggleTheme()">
+          <span id="themeIcon" aria-hidden="true">🌙</span>
+          <span class="muted" id="themeLabel">Dark</span>
+        </button>
+        <button type="button"
+                title="Abmelden"
+                style="width:auto;display:flex;gap:6px;align-items:center"
+                @click="logout()">
+          <span aria-hidden="true">🚪</span>
+          <span>Logout</span>
+        </button>
+      </div>
     </h1>
 
     <!-- Tab-Navigation -->
@@ -1836,6 +1844,23 @@
         switchTab(t){
           this.tab = t;
           if (t === 'konten') this.loadAccounts();
+          if (t === 'buch') this.$nextTick(()=> window.refreshFinanceCharts && window.refreshFinanceCharts());
+        },
+
+        logout(){
+          localStorage.removeItem('hb_token');
+          window.HB_USER_ID = null;
+          this.lines = []; this.groups = [];
+          this.accounts = []; this.accountsTotal = 0;
+          this.current = null; this.currentAccount = null;
+          this.categoryManagerOpen = false;
+          this.tab = 'buch';
+          document.body.classList.remove('no-scroll');
+          const ov = document.getElementById('loginOverlay');
+          if (ov){
+            ov.style.display = 'flex';
+            document.body.classList.add('no-scroll');
+          }
         },
 
         async loadBootstrap(){
