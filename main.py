@@ -416,7 +416,62 @@ def login(u: UserCreate):
 
 @app.get("/me", response_model=UserOut)
 def me(user=Depends(get_current_user)):
-    return {"id": user["id"], "username": user["username"]}
+    return {"id": user["id"], "username": user["username"], "email": user.get("email", "")}
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+@app.patch("/me", response_model=UserOut)
+def update_me(payload: UserUpdate, user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, u in enumerate(data["users"]) if u["id"] == user["id"]), -1)
+    if idx < 0:
+        raise HTTPException(404, "User not found")
+    if payload.email is not None:
+        data["users"][idx]["email"] = payload.email.strip()
+    u = data["users"][idx]
+    write_db(data)
+    return {"id": u["id"], "username": u["username"], "email": u.get("email", "")}
+
+@app.post("/auth/change-password")
+def change_password(payload: PasswordChange, user=Depends(get_current_user)):
+    if not verify_pw(payload.old_password, user["password_hash"]):
+        raise HTTPException(400, "Aktuelles Passwort falsch")
+    data = read_db()
+    idx = next((i for i, u in enumerate(data["users"]) if u["id"] == user["id"]), -1)
+    data["users"][idx]["password_hash"] = hash_pw(payload.new_password)
+    write_db(data)
+    return {"ok": True}
+
+@app.get("/api/export/csv")
+def export_csv(user=Depends(get_current_user)):
+    from fastapi.responses import StreamingResponse
+    import csv, io
+    data = read_db()
+    lines = [normalize_line(l) for l in data["lines"] if l.get("user_id") == user["id"]]
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["Bezeichnung", "Typ", "Kategorie", "Betrag", "Variabel", "Unterposten"])
+    for l in lines:
+        subs = "; ".join(f"{s.get('label','')} {s.get('amount',0):.2f}" for s in (l.get("subitems") or []))
+        w.writerow([
+            l.get("label", ""),
+            "Einnahme" if l["type"] == "income" else "Ausgabe",
+            l.get("category", ""),
+            f"{total_of_line(l):.2f}".replace(".", ","),
+            "ja" if l.get("is_variable") else ("nein" if l.get("is_variable") is False else ""),
+            subs,
+        ])
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=haushaltsbuch.csv"},
+    )
 
 # =========================================
 #               API ROUTES
