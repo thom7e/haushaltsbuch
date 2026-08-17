@@ -416,7 +416,7 @@ def login(u: UserCreate):
 
 @app.get("/me", response_model=UserOut)
 def me(user=Depends(get_current_user)):
-    return {"id": user["id"], "username": user["username"], "email": user.get("email", "")}
+    return {"id": user["id"], "username": user["username"], "email": user.get("email") or ""}
 
 class UserUpdate(BaseModel):
     email: Optional[str] = None
@@ -435,7 +435,7 @@ def update_me(payload: UserUpdate, user=Depends(get_current_user)):
         data["users"][idx]["email"] = payload.email.strip()
     u = data["users"][idx]
     write_db(data)
-    return {"id": u["id"], "username": u["username"], "email": u.get("email", "")}
+    return {"id": u["id"], "username": u["username"], "email": u.get("email") or ""}
 
 @app.post("/auth/change-password")
 def change_password(payload: PasswordChange, user=Depends(get_current_user)):
