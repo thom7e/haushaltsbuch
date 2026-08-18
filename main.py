@@ -1117,40 +1117,41 @@ def disposchutz(
             y, m = y + 1, 1
         next_income = date(y, m, income_day)
 
-    # Collect income amount for the income day
-    income_amount = sum(
-        sum(total_of_line(normalize_line(l)) for l in linked) * mult
-        for rule, linked, mult in income_rules
-        if _should_trigger(rule, next_income.year, next_income.month)
-        and rule["day_of_month"] == income_day
-    )
-
-    # Collect expense items between today (inclusive) and next_income (exclusive)
+    # Build timeline: all rules (income + expense) between today and next_income (inclusive)
     items = []
     check_periods = {(today.year, today.month)}
     y, m = today.year, today.month + 1
     if m > 12: y, m = y + 1, 1
     check_periods.add((y, m))
 
-    for rule, linked, mult in expense_rules:
+    def add_rule_to_timeline(rule, linked, mult, is_income_rule):
         dom = rule["day_of_month"]
         for (ry, rm) in sorted(check_periods):
             if not _should_trigger(rule, ry, rm):
                 continue
             item_date = date(ry, rm, dom)
-            if item_date < today or item_date >= next_income:
+            # expenses: today <= date < next_income; income: today <= date <= next_income
+            if item_date < today:
+                continue
+            if is_income_rule and item_date > next_income:
+                continue
+            if not is_income_rule and item_date >= next_income:
                 continue
             if linked:
-                nl = normalize_line(linked[0])
                 label = ", ".join(normalize_line(l).get("label", "") for l in linked)
-                amt = -sum(total_of_line(normalize_line(l)) for l in linked) * mult
+                raw_amt = sum(total_of_line(normalize_line(l)) for l in linked) * mult
+                amt = raw_amt if is_income_rule else -raw_amt
             else:
                 label = rule.get("manual_label") or ""
                 amt = -float(rule.get("manual_amount") or 0)
-            items.append({"date": item_date.isoformat(), "day": dom, "label": label, "amount": round(amt, 2), "is_income": False})
+            is_main = is_income_rule and item_date == next_income
+            items.append({"date": item_date.isoformat(), "day": dom, "label": label, "amount": round(amt, 2), "is_income": is_income_rule, "is_main_income": is_main})
 
-    # Add income marker
-    items.append({"date": next_income.isoformat(), "day": income_day, "label": "Gehaltseingang", "amount": round(income_amount, 2), "is_income": True})
+    for rule, linked, mult in expense_rules:
+        add_rule_to_timeline(rule, linked, mult, False)
+    for rule, linked, mult in income_rules:
+        add_rule_to_timeline(rule, linked, mult, True)
+
     items.sort(key=lambda x: x["date"])
 
     # Running balance
