@@ -1765,18 +1765,20 @@
 
             <template x-for="r in accountRecurring" :key="r.id">
               <div>
-                <div class="booking-row" style="align-items:center;">
-                  <div style="flex:1;min-width:0;">
-                    <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · ' + recurringLabel(r)"></div>
-                    <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · ' + fmt(r.line_amount))"></div>
+                <template x-for="(dl, dlidx) in (r.display_lines||[{label:r.line_label,amount:r.line_amount}])" :key="r.id+'-'+dlidx">
+                  <div class="booking-row" style="align-items:center;">
+                    <div style="flex:1;min-width:0;">
+                      <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : dl.label) + ' · ' + recurringLabel(r)"></div>
+                      <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · ' + fmt(dl.amount))"></div>
+                    </div>
+                    <label x-show="dlidx===0" style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
+                      <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
+                      <span class="muted" style="font-size:12px">aktiv</span>
+                    </label>
+                    <button x-show="dlidx===0" type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="editRecurringOpen(r)">✏️</button>
+                    <button x-show="dlidx===0" type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteRecurring(r)">🗑️</button>
                   </div>
-                  <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
-                    <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
-                    <span class="muted" style="font-size:12px">aktiv</span>
-                  </label>
-                  <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="editRecurringOpen(r)">✏️</button>
-                  <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteRecurring(r)">🗑️</button>
-                </div>
+                </template>
                 <template x-if="editingRecurring?.id === r.id">
                   <div class="card" style="margin:4px 0 8px;">
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">

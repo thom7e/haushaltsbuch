@@ -914,11 +914,14 @@ def list_recurring(account_id: str, user=Depends(get_current_user)):
             lbl = ", ".join(l.get("label", "") for l in linked)
             amt = sum(account_deposit_amount(l) for l in linked)
             missing = False
+            display_lines = [{"label": l.get("label", ""), "amount": account_deposit_amount(l)} for l in linked]
         elif r.get("manual_label"):
             lbl, amt, missing = r["manual_label"], r.get("manual_amount"), False
+            display_lines = [{"label": lbl, "amount": amt}]
         else:
             lbl, amt, missing = None, None, True
-        out.append({**r, "line_label": lbl, "line_amount": amt, "line_missing": missing})
+            display_lines = [{"label": None, "amount": None}]
+        out.append({**r, "line_label": lbl, "line_amount": amt, "line_missing": missing, "display_lines": display_lines})
     return out
 
 @app.post("/api/accounts/{account_id}/recurring")
