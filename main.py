@@ -572,6 +572,19 @@ def groups(user=Depends(get_current_user)):
     order_type = {"income": 0, "expense": 1}
     return sorted(gmap.values(), key=lambda g: (order_type.get(g["type"], 99), g["category"]))
 
+@app.get("/api/lines/unassigned")
+def list_unassigned_lines(user=Depends(get_current_user)):
+    data = read_db()
+    user_account_ids = {a["id"] for a in data["accounts"] if a.get("user_id") == user["id"]}
+    assigned_ids = set()
+    for r in data["recurring_rules"]:
+        if r.get("account_id") in user_account_ids:
+            for lid in r.get("linked_line_ids", []):
+                assigned_ids.add(lid)
+            if r.get("linked_line_id"):
+                assigned_ids.add(r["linked_line_id"])
+    return [normalize_line(l) for l in data["lines"] if l.get("user_id") == user["id"] and l.get("id") not in assigned_ids]
+
 @app.get("/api/lines")
 def list_lines(sort: Optional[str] = None, user=Depends(get_current_user)):
     data = read_db()
