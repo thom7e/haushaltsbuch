@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Body, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
@@ -382,9 +382,16 @@ static_dir = os.path.join(ROOT_DIR, "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+_INDEX = os.path.join(static_dir, "index.html")
+_NO_CACHE = {"Cache-Control": "no-store"}
+
 @app.get("/")
 def root():
-    return RedirectResponse(url="/static/index.html", status_code=307)
+    return FileResponse(_INDEX, headers=_NO_CACHE)
+
+@app.get("/static/index.html")
+def index_html():
+    return FileResponse(_INDEX, headers=_NO_CACHE)
 
 # =========================================
 #               AUTH ROUTES
