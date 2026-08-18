@@ -4,6 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Haushaltsbuch – Startseite</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231B2130'/><text x='16' y='23' text-anchor='middle' font-size='18' font-family='Arial,sans-serif' font-weight='bold' fill='%238EC8E6'>%E2%82%AC</text></svg>">
 
   <!-- Fonts & Libs -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
@@ -1011,6 +1012,17 @@
       .account-spark{ display:none; }
     }
 
+    .institute-group{ border-top:1px solid var(--border); }
+    .institute-group:first-child{ border-top:none; }
+    .institute-group .account-row{ border-top:none; }
+    .institute-header{ display:flex; align-items:center; gap:14px; padding:14px 4px; }
+    .institute-total{ font-weight:700; min-width:100px; text-align:right; flex:0 0 auto; }
+    .institute-select{
+      width:100%; margin:0 0 12px; padding:8px 10px;
+      background:var(--panel-2); border:1px solid var(--border);
+      color:var(--ink); border-radius:var(--radius-sm); cursor:pointer; font-size:14px;
+    }
+
     /* =========================
        KONTODETAIL
        ========================= */
@@ -1494,15 +1506,38 @@
           </div>
         </template>
 
-        <template x-for="a in accounts" :key="a.id">
-          <div class="account-row" @click="openAccountModal(a)">
-            <div class="account-icon" x-text="a.icon || '🏦'"></div>
-            <div class="account-info">
-              <div class="account-name" x-text="a.name"></div>
-              <div class="account-institute" x-text="a.institute"></div>
-            </div>
-            <canvas class="account-spark" :id="'spark-'+a.id"></canvas>
-            <div class="account-balance" x-text="fmt(a.balance)"></div>
+        <template x-for="grp in accountGroups" :key="grp.institute">
+          <div class="institute-group">
+            <template x-if="grp.accounts.length === 1">
+              <div class="account-row" @click="openAccountModal(grp.accounts[0])">
+                <div class="account-icon" x-text="grp.accounts[0].icon || '🏦'"></div>
+                <div class="account-info">
+                  <div class="account-name" x-text="grp.accounts[0].name"></div>
+                  <div class="account-institute" x-text="grp.accounts[0].institute"></div>
+                </div>
+                <canvas class="account-spark" :id="'spark-'+grp.accounts[0].id"></canvas>
+                <div class="account-balance" x-text="fmt(grp.accounts[0].balance)"></div>
+              </div>
+            </template>
+            <template x-if="grp.accounts.length > 1">
+              <div>
+                <div class="institute-header">
+                  <div class="account-icon" x-text="grp.accounts[0].icon || '🏦'"></div>
+                  <div class="account-info">
+                    <div class="account-name" x-text="grp.institute"></div>
+                    <div class="account-institute" x-text="grp.accounts.length + ' Unterkonten'"></div>
+                  </div>
+                  <div class="institute-total" x-text="fmt(grp.total)"></div>
+                </div>
+                <select class="institute-select"
+                        @change="openAccountModal(grp.accounts.find(a=>String(a.id)===$event.target.value)); $event.target.selectedIndex=0">
+                  <option value="">Unterkonto wählen…</option>
+                  <template x-for="a in grp.accounts" :key="a.id">
+                    <option :value="String(a.id)" x-text="a.name + ' · ' + fmt(a.balance)"></option>
+                  </template>
+                </select>
+              </div>
+            </template>
           </div>
         </template>
       </div>
@@ -1890,6 +1925,16 @@
         filter:{type:'', category:'', q:''},
         sumIncome:0, sumExpense:0,
         get net(){ return this.sumIncome - this.sumExpense },
+        get accountGroups(){
+          const map = {};
+          for (const a of this.accounts) {
+            const key = a.institute || 'Sonstige';
+            if (!map[key]) map[key] = { institute: key, accounts: [], total: 0 };
+            map[key].accounts.push(a);
+            map[key].total += a.balance || 0;
+          }
+          return Object.values(map);
+        },
 
         async init(){
           window.App = this;
