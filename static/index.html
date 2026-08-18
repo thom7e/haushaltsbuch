@@ -1763,7 +1763,12 @@
         </div>
         <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
           <label style="min-width:160px;flex:0 0 auto;">Institut</label>
-          <input style="flex:1" placeholder="z. B. Trade Republic" x-model="currentAccount.institute" />
+          <input style="flex:1" placeholder="z. B. Trade Republic" x-model="currentAccount.institute" list="institute-list" autocomplete="off" />
+          <datalist id="institute-list">
+            <template x-for="inst in [...new Set(accounts.map(a=>a.institute).filter(Boolean))].sort()" :key="inst">
+              <option :value="inst"></option>
+            </template>
+          </datalist>
         </div>
         <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
           <label style="min-width:160px;flex:0 0 auto;">Icon</label>
