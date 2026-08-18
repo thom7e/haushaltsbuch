@@ -1791,7 +1791,7 @@
                       <div style="flex:1;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;">
                         <template x-for="l in lines" :key="'er-'+l.id">
                           <label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;">
-                            <input type="checkbox" style="width:auto;" :checked="editingRecurring.linked_line_ids.includes(l.id)" @change="toggleLineId(editingRecurring, l.id)">
+                            <input type="checkbox" style="width:auto;" :checked="(editingRecurring.linked_line_ids||[]).includes(l.id)" @change="toggleLineId(editingRecurring, l.id)">
                             <span x-text="l.label + ' (' + fmt(total(l)) + ')'"></span>
                           </label>
                         </template>
@@ -1867,7 +1867,7 @@
                   <div style="flex:1;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;">
                     <template x-for="l in lines" :key="'rl-'+l.id">
                       <label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;">
-                        <input type="checkbox" style="width:auto;" :checked="newRecurring.linked_line_ids.includes(l.id)" @change="toggleLineId(newRecurring, l.id)">
+                        <input type="checkbox" style="width:auto;" :checked="(newRecurring.linked_line_ids||[]).includes(l.id)" @change="toggleLineId(newRecurring, l.id)">
                         <span x-text="l.label + ' (' + fmt(total(l)) + ')'"></span>
                       </label>
                     </template>
@@ -2685,6 +2685,7 @@
         },
 
         toggleLineId(obj, id){
+          if (!Array.isArray(obj.linked_line_ids)) obj.linked_line_ids = [];
           const i = obj.linked_line_ids.indexOf(id);
           if (i >= 0) obj.linked_line_ids.splice(i, 1); else obj.linked_line_ids.push(id);
           obj.linked_line_ids = [...obj.linked_line_ids];
