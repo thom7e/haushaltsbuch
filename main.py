@@ -126,6 +126,10 @@ def normalize_account(raw: dict, user_id: Optional[str] = None) -> dict:
     except (TypeError, ValueError):
         a["sort_order"] = 0.0
     a["archived"] = bool(a.get("archived", False))
+    try:
+        a["real_balance"] = float(a["real_balance"]) if a.get("real_balance") is not None else None
+    except (TypeError, ValueError):
+        a["real_balance"] = None
     return a
 
 def normalize_booking(raw: dict, account_id: Optional[str] = None) -> dict:
@@ -191,6 +195,10 @@ def normalize_recurring_rule(raw: dict, account_id: Optional[str] = None) -> dic
         r["manual_amount"] = float(r["manual_amount"]) if r.get("manual_amount") is not None else None
     except (TypeError, ValueError):
         r["manual_amount"] = None
+    if not isinstance(r.get("skipped_occurrences"), list):
+        r["skipped_occurrences"] = []
+    else:
+        r["skipped_occurrences"] = [s for s in r["skipped_occurrences"] if isinstance(s, str)]
     return r
 
 def migrate_db(data: dict) -> dict:
@@ -286,11 +294,14 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
                 except (ValueError, TypeError):
                     pass
 
+        skipped = set(rule.get("skipped_occurrences") or [])
+
         y, m = start.year, start.month
         while (y, m) <= (today.year, today.month):
             occurrence = date(y, m, rule["day_of_month"])
             in_range = occurrence >= start and occurrence <= today and (end is None or occurrence <= end)
-            if in_range and (y, m) not in existing_months and _should_trigger(rule, y, m):
+            ym_str = f"{y}-{m:02d}"
+            if in_range and (y, m) not in existing_months and _should_trigger(rule, y, m) and ym_str not in skipped:
                 mult = _freq_multiplier(rule)
                 b_amount = sum(account_deposit_amount(l) for l in linked) * mult if linked else float(rule["manual_amount"])
                 b_note = ", ".join(l.get("label","") for l in linked) if linked else (rule["manual_label"] or "")
@@ -858,6 +869,11 @@ def update_account(account_id: str, payload: dict = Body(...), user=Depends(get_
             pass
     if "archived" in payload:
         cur["archived"] = bool(payload.get("archived"))
+    if "real_balance" in payload:
+        try:
+            cur["real_balance"] = float(payload["real_balance"]) if payload.get("real_balance") is not None else None
+        except (TypeError, ValueError):
+            pass
     cur["user_id"] = user["id"]
     data["accounts"][idx] = cur
     write_db(data)
@@ -914,9 +930,23 @@ def delete_booking(booking_id: str, user=Depends(get_current_user)):
     idx = next((i for i, b in enumerate(data["bookings"]) if b.get("id") == booking_id), -1)
     if idx < 0:
         raise HTTPException(404, "Buchung nicht gefunden")
-    acc = next((a for a in data["accounts"] if a.get("id") == data["bookings"][idx].get("account_id")), None)
+    b = data["bookings"][idx]
+    acc = next((a for a in data["accounts"] if a.get("id") == b.get("account_id")), None)
     if not acc or acc.get("user_id") != user["id"]:
         raise HTTPException(404, "Buchung nicht gefunden")
+    if b.get("source") == "recurring" and b.get("recurring_rule_id"):
+        try:
+            bd = date.fromisoformat(b["date"])
+            ym = f"{bd.year}-{bd.month:02d}"
+            for r in data["recurring_rules"]:
+                if r.get("id") == b["recurring_rule_id"]:
+                    if not isinstance(r.get("skipped_occurrences"), list):
+                        r["skipped_occurrences"] = []
+                    if ym not in r["skipped_occurrences"]:
+                        r["skipped_occurrences"].append(ym)
+                    break
+        except (ValueError, TypeError):
+            pass
     data["bookings"].pop(idx)
     write_db(data)
     return {"ok": True}

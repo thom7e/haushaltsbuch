@@ -1523,6 +1523,9 @@
                 <div class="account-info">
                   <div class="account-name" x-text="grp.accounts[0].name"></div>
                   <div class="account-institute" x-text="grp.accounts[0].institute"></div>
+                  <template x-if="grp.accounts[0].real_balance != null">
+                    <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(grp.accounts[0].real_balance) + '  Δ ' + fmt(grp.accounts[0].real_balance - grp.accounts[0].balance)"></div>
+                  </template>
                 </div>
                 <canvas class="account-spark" :id="'spark-'+grp.accounts[0].id"></canvas>
                 <div class="account-balance" x-text="fmt(grp.accounts[0].balance)"></div>
@@ -1543,6 +1546,9 @@
                     <div class="account-icon" x-text="a.icon || '🏦'"></div>
                     <div class="account-info">
                       <div class="account-name" x-text="a.name"></div>
+                      <template x-if="a.real_balance != null">
+                        <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(a.real_balance) + '  Δ ' + fmt(a.real_balance - a.balance)"></div>
+                      </template>
                     </div>
                     <canvas class="account-spark" :id="'spark-'+a.id"></canvas>
                     <div class="account-balance" x-text="fmt(a.balance)"></div>
@@ -1578,7 +1584,7 @@
       <div class="card" style="margin-top:12px;">
         <div style="font-weight:700;font-size:14px;margin-bottom:10px;">Disposchutz</div>
         <div class="controls-row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <select style="flex:1;min-width:140px" x-model="dispoInstitute" @change="dispoResult=null">
+          <select style="flex:1;min-width:140px" x-model="dispoInstitute" @change="dispoInstituteChanged()">
             <option value="">Institut wählen…</option>
             <template x-for="inst in dispoInstitutes" :key="inst">
               <option :value="inst" x-text="inst"></option>
@@ -1819,6 +1825,10 @@
         <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
           <label style="min-width:160px;flex:0 0 auto;">Icon</label>
           <input style="flex:0 0 auto;width:70px;" maxlength="2" x-model="currentAccount.icon" />
+        </div>
+        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
+          <label style="min-width:160px;flex:0 0 auto;">Echter Kontostand (€)</label>
+          <input type="number" step="0.01" style="flex:1" placeholder="leer = nicht gepflegt" x-model.number="currentAccount.real_balance" />
         </div>
 
         <div class="controls-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
@@ -2061,7 +2071,7 @@
                   <span class="booking-note" x-text="b.note || (b.source==='recurring' ? 'Automatisch' : '')"></span>
                   <span class="pill" x-show="b.source==='recurring'">Automatisch</span>
                   <span class="booking-amount" :class="b.amount>=0?'positive':'negative'" x-text="fmt(b.amount)"></span>
-                  <button type="button" x-show="b.source==='manual'" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteBooking(b)">🗑️</button>
+                  <button type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteBooking(b)">🗑️</button>
                 </div>
               </template>
             </div>
@@ -2693,7 +2703,7 @@
           if (a.id) this.loadAccountDetail(a.id);
         },
         newAccountModal(){
-          this.openAccountModal({id:null, name:'', institute:'', icon:'🏦'});
+          this.openAccountModal({id:null, name:'', institute:'', icon:'🏦', real_balance:null});
         },
         closeAccountModal(){
           this.currentAccount = null;
@@ -2721,6 +2731,7 @@
             name: this.currentAccount.name,
             institute: this.currentAccount.institute || '',
             icon: this.currentAccount.icon || '🏦',
+            real_balance: (this.currentAccount.real_balance != null && this.currentAccount.real_balance !== '') ? Number(this.currentAccount.real_balance) : null,
           };
           const res = await authFetch(url, {
             method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
@@ -2760,7 +2771,10 @@
         },
 
         async deleteBooking(b){
-          const ok = await this.confirmMsg('Buchung löschen?', 'Buchung löschen');
+          const msg = b.source === 'recurring'
+            ? 'Automatische Buchung löschen? Sie wird für diesen Monat nicht neu erstellt.'
+            : 'Buchung löschen?';
+          const ok = await this.confirmMsg(msg, 'Buchung löschen');
           if(!ok) return;
           const res = await authFetch(this.api + '/api/bookings/' + b.id, {method:'DELETE'});
           if(!res.ok){ await this.alertMsg('Löschen fehlgeschlagen'); return; }
@@ -2899,6 +2913,15 @@
           if(!res.ok){ await this.alertMsg('Aufteilen fehlgeschlagen'); return; }
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
+        },
+
+        dispoInstituteChanged(){
+          this.dispoResult = null;
+          if(!this.dispoInstitute) return;
+          const accs = this.accounts.filter(a => a.institute === this.dispoInstitute && a.real_balance != null);
+          if(accs.length > 0){
+            this.dispoBalance = Math.round(accs.reduce((s,a) => s + a.real_balance, 0) * 100) / 100;
+          }
         },
 
         async calcDispo(){
