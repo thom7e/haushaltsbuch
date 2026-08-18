@@ -1230,7 +1230,19 @@ def disposchutz(
     # = what actually accumulates each month
     phase2_net = round(running - (balance_after_next_income or balance), 2)
 
-    # Monthly reserves for yearly/quarterly expense rules (their base_amount = monthly portion)
+    # Steady-state monthly surplus: all rules normalized to monthly equivalents
+    # (base_amount IS the monthly portion for all frequencies)
+    def _monthly_equiv(rule, linked, mult):
+        if linked:
+            return sum(account_deposit_amount(l) for l in linked)
+        return float(rule.get("manual_amount") or 0) / mult
+
+    monthly_income_equiv = sum(_monthly_equiv(r, l, m) for r, l, m in income_rules)
+    monthly_expense_equiv = sum(_monthly_equiv(r, l, m) for r, l, m in expense_rules)
+    monthly_surplus = round(monthly_income_equiv - monthly_expense_equiv, 2)
+    transferable = monthly_surplus
+
+    # Breakdown of yearly/quarterly reserves (informational only — already in monthly_expense_equiv)
     reserves_detail = []
     monthly_reserves = 0.0
     for rule, linked, mult in expense_rules:
@@ -1249,9 +1261,6 @@ def disposchutz(
             "frequency": rule["frequency"],
         })
     monthly_reserves = round(monthly_reserves, 2)
-    # transferable = monthly net surplus minus reserves
-    # = what you can sustainably move to Trade Republic each month
-    transferable = round(phase2_net - monthly_reserves, 2)
 
     return {
         "institute": institute,
