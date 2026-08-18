@@ -1214,14 +1214,21 @@ def disposchutz(
 
     items.sort(key=lambda x: (x["date"], 0 if x["is_income"] else 1))
 
-    # Running balance — track min across both phases for full dispo check
+    # Running balance — track min across both phases for dispo check
     running = balance
     min_balance = balance
+    balance_after_next_income = None
     for item in items:
         running = round(running + item["amount"], 2)
         item["running_balance"] = running
         if not item["is_income"]:
             min_balance = min(min_balance, running)
+        if item.get("is_main_income") and balance_after_next_income is None:
+            balance_after_next_income = running
+
+    # monthly_surplus = net change over phase 2 (one full income cycle)
+    # = what actually accumulates each month
+    phase2_net = round(running - (balance_after_next_income or balance), 2)
 
     # Monthly reserves for yearly/quarterly expense rules (their base_amount = monthly portion)
     reserves_detail = []
@@ -1242,9 +1249,9 @@ def disposchutz(
             "frequency": rule["frequency"],
         })
     monthly_reserves = round(monthly_reserves, 2)
-    # transferable = global floor across both months minus monthly reserves
-    # = max amount safely movable to Trade Republic today without ever hitting 0
-    transferable = round(min_balance - monthly_reserves, 2)
+    # transferable = monthly net surplus minus reserves
+    # = what you can sustainably move to Trade Republic each month
+    transferable = round(phase2_net - monthly_reserves, 2)
 
     return {
         "institute": institute,
@@ -1256,6 +1263,7 @@ def disposchutz(
         "min_balance": round(min_balance, 2),
         "dispo_risk": min_balance < 0,
         "final_balance": round(running, 2),
+        "monthly_surplus": phase2_net,
         "monthly_reserves": monthly_reserves,
         "reserves_detail": reserves_detail,
         "transferable": transferable,
