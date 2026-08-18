@@ -1017,10 +1017,12 @@
     .institute-group .account-row{ border-top:none; }
     .institute-header{ display:flex; align-items:center; gap:14px; padding:14px 4px; }
     .institute-total{ font-weight:700; min-width:100px; text-align:right; flex:0 0 auto; }
-    .institute-select{
-      width:100%; margin:0 0 12px; padding:8px 10px;
-      background:var(--panel-2); border:1px solid var(--border);
-      color:var(--ink); border-radius:var(--radius-sm); cursor:pointer; font-size:14px;
+    .account-sub{
+      padding-left:20px;
+      opacity:0.85;
+    }
+    .account-sub .account-icon{
+      width:32px; height:32px; font-size:15px;
     }
 
     /* =========================
@@ -1529,13 +1531,16 @@
                   </div>
                   <div class="institute-total" x-text="fmt(grp.total)"></div>
                 </div>
-                <select class="institute-select"
-                        @change="openAccountModal(grp.accounts.find(a=>String(a.id)===$event.target.value)); $event.target.selectedIndex=0">
-                  <option value="">Unterkonto wählen…</option>
-                  <template x-for="a in grp.accounts" :key="a.id">
-                    <option :value="String(a.id)" x-text="a.name + ' · ' + fmt(a.balance)"></option>
-                  </template>
-                </select>
+                <template x-for="a in grp.accounts" :key="a.id">
+                  <div class="account-row account-sub" @click="openAccountModal(a)">
+                    <div class="account-icon" x-text="a.icon || '🏦'"></div>
+                    <div class="account-info">
+                      <div class="account-name" x-text="a.name"></div>
+                    </div>
+                    <canvas class="account-spark" :id="'spark-'+a.id"></canvas>
+                    <div class="account-balance" x-text="fmt(a.balance)"></div>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
@@ -1748,15 +1753,15 @@
 
         <template x-if="currentAccount?.id">
           <div>
-            <!-- Dauerauftrag -->
-            <h3 class="muted" style="margin:16px 0 6px;font-size:14px;font-weight:600">Dauerauftrag</h3>
+            <!-- Daueraufträge / Lastschriften -->
+            <h3 class="muted" style="margin:16px 0 6px;font-size:14px;font-weight:600">Daueraufträge &amp; Lastschriften</h3>
 
             <template x-for="r in accountRecurring" :key="r.id">
               <div>
                 <div class="booking-row" style="align-items:center;">
                   <div style="flex:1;min-width:0;">
                     <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · jeden ' + r.day_of_month + '. im Monat'"></div>
-                    <div class="muted" style="font-size:12px" x-text="r.line_missing ? '' : ('aktuell ' + fmt(r.line_amount) + ' pro Monat')"></div>
+                    <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · aktuell ' + fmt(r.line_amount) + ' pro Monat')"></div>
                   </div>
                   <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
                     <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
@@ -1782,6 +1787,13 @@
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                       <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
                       <input type="date" style="flex:1" x-model="editingRecurring.start_date" />
+                    </div>
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Typ</label>
+                      <select style="flex:1" x-model="editingRecurring.rule_type">
+                        <option value="Dauerauftrag">Dauerauftrag</option>
+                        <option value="Lastschrift">Lastschrift</option>
+                      </select>
                     </div>
                     <div class="controls-row" style="justify-content:flex-end;gap:8px;">
                       <button type="button" style="flex:0 0 auto;width:auto;" @click="editingRecurring=null">Abbrechen</button>
@@ -1811,8 +1823,15 @@
                   <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
                   <input type="date" style="flex:1" x-model="newRecurring.start_date" />
                 </div>
+                <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                  <label style="min-width:120px;flex:0 0 auto;">Typ</label>
+                  <select style="flex:1" x-model="newRecurring.rule_type">
+                    <option value="Dauerauftrag">Dauerauftrag</option>
+                    <option value="Lastschrift">Lastschrift</option>
+                  </select>
+                </div>
                 <div class="controls-row" style="justify-content:flex-end;">
-                  <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="addRecurring()">Dauerauftrag anlegen</button>
+                  <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="addRecurring()">Anlegen</button>
                 </div>
               </div>
             </template>
@@ -1905,7 +1924,7 @@
         addRecurringOpen: false,
         editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
-        newRecurring: {linked_line_id:'', day_of_month:1, start_date:''},
+        newRecurring: {linked_line_id:'', day_of_month:1, start_date:'', rule_type:'Dauerauftrag'},
 
         categoriesServer: [],
         sessionCategories: [],
@@ -2545,7 +2564,7 @@
           });
           if(!res.ok){ await this.alertMsg('Dauerauftrag konnte nicht gespeichert werden'); return; }
           this.addRecurringOpen = false;
-          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO()};
+          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag'};
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
         },
@@ -2556,6 +2575,7 @@
             linked_line_id: r.linked_line_id,
             day_of_month: r.day_of_month,
             start_date: r.start_date,
+            rule_type: r.rule_type || 'Dauerauftrag',
           };
         },
 
@@ -2567,6 +2587,7 @@
               linked_line_id: r.linked_line_id,
               day_of_month: r.day_of_month,
               start_date: r.start_date,
+              rule_type: r.rule_type,
             })
           });
           if(!res.ok){ await this.alertMsg('Speichern fehlgeschlagen'); return; }

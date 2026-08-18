@@ -170,6 +170,7 @@ def normalize_recurring_rule(raw: dict, account_id: Optional[str] = None) -> dic
         except (TypeError, ValueError):
             ed = None
     r["end_date"] = ed
+    r["rule_type"] = r.get("rule_type") if r.get("rule_type") in ("Dauerauftrag", "Lastschrift") else "Dauerauftrag"
     return r
 
 def migrate_db(data: dict) -> dict:
@@ -925,6 +926,8 @@ def update_recurring(rule_id: str, payload: dict = Body(...), user=Depends(get_c
                 pass
         else:
             cur["end_date"] = None
+    if "rule_type" in payload and payload.get("rule_type") in ("Dauerauftrag", "Lastschrift"):
+        cur["rule_type"] = payload["rule_type"]
 
     data["recurring_rules"][idx] = cur
     write_db(data)
