@@ -218,6 +218,12 @@ def migrate_db(data: dict) -> dict:
 def account_deposit_amount(line: dict) -> float:
     return abs(total_of_line(normalize_line(line)))
 
+def _freq_multiplier(rule: dict) -> float:
+    freq = rule.get("frequency", "monthly")
+    if freq == "yearly":    return 12.0
+    if freq == "quarterly": return 3.0
+    return 1.0  # monthly, custom
+
 def _should_trigger(rule: dict, y: int, m: int) -> bool:
     freq = rule.get("frequency", "monthly")
     if freq == "quarterly":
@@ -285,7 +291,8 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
             occurrence = date(y, m, rule["day_of_month"])
             in_range = occurrence >= start and occurrence <= today and (end is None or occurrence <= end)
             if in_range and (y, m) not in existing_months and _should_trigger(rule, y, m):
-                b_amount = sum(account_deposit_amount(l) for l in linked) if linked else float(rule["manual_amount"])
+                mult = _freq_multiplier(rule)
+                b_amount = sum(account_deposit_amount(l) for l in linked) * mult if linked else float(rule["manual_amount"])
                 b_note = ", ".join(l.get("label","") for l in linked) if linked else (rule["manual_label"] or "")
                 booking = normalize_booking({
                     "date": occurrence.isoformat(),
@@ -924,10 +931,11 @@ def list_recurring(account_id: str, user=Depends(get_current_user)):
     for r in rules:
         linked = [lines_by_id[lid] for lid in r.get("linked_line_ids", []) if lid in lines_by_id]
         if linked:
+            mult = _freq_multiplier(r)
             lbl = ", ".join(l.get("label", "") for l in linked)
-            amt = sum(account_deposit_amount(l) for l in linked)
+            amt = sum(account_deposit_amount(l) for l in linked) * mult
             missing = False
-            display_lines = [{"label": l.get("label", ""), "amount": account_deposit_amount(l)} for l in linked]
+            display_lines = [{"label": l.get("label", ""), "amount": account_deposit_amount(l) * mult, "base_amount": account_deposit_amount(l), "multiplier": mult} for l in linked]
         elif r.get("manual_label"):
             lbl, amt, missing = r["manual_label"], r.get("manual_amount"), False
             display_lines = [{"label": lbl, "amount": amt}]
@@ -1087,9 +1095,10 @@ def surplus_calc(
             continue
         linked = [lines_by_id[lid] for lid in rule.get("linked_line_ids", []) if lid in lines_by_id]
         if linked:
+            mult = _freq_multiplier(rule)
             for l in linked:
                 nl = normalize_line(l)
-                amt = total_of_line(nl)
+                amt = total_of_line(nl) * mult
                 signed = amt if nl["type"] == "income" else -amt
                 pending_items.append({
                     "label": nl.get("label", ""),

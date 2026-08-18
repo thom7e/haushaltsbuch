@@ -1835,7 +1835,7 @@
                   <div class="booking-row" style="align-items:center;">
                     <div style="flex:1;min-width:0;">
                       <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : dl.label) + ' · ' + recurringLabel(r)"></div>
-                      <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · ' + fmt(dl.amount))"></div>
+                      <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · ' + fmt(dl.amount) + (dl.multiplier > 1 ? ' (' + dl.multiplier + ' × ' + fmt(dl.base_amount) + ')' : ''))"></div>
                     </div>
                     <label x-show="dlidx===0" style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
                       <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
