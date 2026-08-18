@@ -2647,7 +2647,7 @@
 
         async addRecurring(){
           if(!this.currentAccount?.id) return;
-          if(this.newRecurring.source === 'linked' && !this.newRecurring.linked_line_ids.length){ await this.alertMsg('Bitte mindestens einen Posten aus dem Haushaltsbuch wählen.', 'Pflichtfeld'); return; }
+          if(this.newRecurring.source === 'linked' && !(this.newRecurring.linked_line_ids||[]).length){ await this.alertMsg('Bitte mindestens einen Posten aus dem Haushaltsbuch wählen.', 'Pflichtfeld'); return; }
           if(this.newRecurring.source === 'manual' && (!this.newRecurring.manual_label || this.newRecurring.manual_amount == null)){ await this.alertMsg('Bitte Bezeichnung und Betrag eingeben.', 'Pflichtfeld'); return; }
           const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/recurring', {
             method:'POST', headers:{'Content-Type':'application/json'},
