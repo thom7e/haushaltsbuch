@@ -1523,12 +1523,15 @@
                 <div class="account-info">
                   <div class="account-name" x-text="grp.accounts[0].name"></div>
                   <div class="account-institute" x-text="grp.accounts[0].institute"></div>
-                  <template x-if="grp.accounts[0].real_balance != null">
-                    <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(grp.accounts[0].real_balance) + '  Δ ' + fmt(grp.accounts[0].real_balance - grp.accounts[0].balance)"></div>
+                  <template x-if="instituteBalances[grp.institute] != null">
+                    <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(instituteBalances[grp.institute]) + '  Δ ' + fmt(instituteBalances[grp.institute] - grp.total)"></div>
                   </template>
                 </div>
                 <canvas class="account-spark" :id="'spark-'+grp.accounts[0].id"></canvas>
-                <div class="account-balance" x-text="fmt(grp.accounts[0].balance)"></div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="account-balance" x-text="fmt(grp.accounts[0].balance)"></div>
+                  <button type="button" @click.stop="editInstituteBalance(grp.institute)" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto;padding:2px 4px;font-size:13px;" title="Echten Kontostand eintragen">✏️</button>
+                </div>
               </div>
             </template>
             <template x-if="grp.accounts.length > 1">
@@ -1538,17 +1541,20 @@
                   <div class="account-info">
                     <div class="account-name" x-text="grp.institute"></div>
                     <div class="account-institute" x-text="grp.accounts.length + ' Unterkonten'"></div>
+                    <template x-if="instituteBalances[grp.institute] != null">
+                      <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(instituteBalances[grp.institute]) + '  Δ ' + fmt(instituteBalances[grp.institute] - grp.total)"></div>
+                    </template>
                   </div>
-                  <div class="institute-total" x-text="fmt(grp.total)"></div>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <div class="institute-total" x-text="fmt(grp.total)"></div>
+                    <button type="button" @click="editInstituteBalance(grp.institute)" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto;padding:2px 4px;font-size:13px;" title="Echten Kontostand eintragen">✏️</button>
+                  </div>
                 </div>
                 <template x-for="a in grp.accounts" :key="a.id">
                   <div class="account-row account-sub" @click="openAccountModal(a)">
                     <div class="account-icon" x-text="a.icon || '🏦'"></div>
                     <div class="account-info">
                       <div class="account-name" x-text="a.name"></div>
-                      <template x-if="a.real_balance != null">
-                        <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(a.real_balance) + '  Δ ' + fmt(a.real_balance - a.balance)"></div>
-                      </template>
                     </div>
                     <canvas class="account-spark" :id="'spark-'+a.id"></canvas>
                     <div class="account-balance" x-text="fmt(a.balance)"></div>
@@ -1825,10 +1831,6 @@
         <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
           <label style="min-width:160px;flex:0 0 auto;">Icon</label>
           <input style="flex:0 0 auto;width:70px;" maxlength="2" x-model="currentAccount.icon" />
-        </div>
-        <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
-          <label style="min-width:160px;flex:0 0 auto;">Echter Kontostand (€)</label>
-          <input type="number" step="0.01" style="flex:1" placeholder="leer = nicht gepflegt" x-model.number="currentAccount.real_balance" />
         </div>
 
         <div class="controls-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
@@ -2136,6 +2138,7 @@
         dispoBalance: null,
         dispoResult: null,
         dispoInstitutes: [],
+        instituteBalances: {},
         currentAccount: null,
         accountBookings: [],
         accountRecurring: [],
@@ -2600,6 +2603,11 @@
             this.openDlg({mode:'confirm', title, message, value:'', resolve:res});
           });
         },
+        promptMsg(message, title='Eingabe', defaultVal=''){
+          return new Promise(res=>{
+            this.openDlg({mode:'input', title, message, value: String(defaultVal ?? ''), resolve:res});
+          });
+        },
 
         randomBadgeStyle(){
           const h=Math.floor(Math.random()*360);
@@ -2665,19 +2673,35 @@
         async loadAccounts(){
           this.accountsLoading = true;
           try{
-            const [ar, ur] = await Promise.all([
+            const [ar, ur, ibr] = await Promise.all([
               authFetch(this.api + '/api/accounts'),
               authFetch(this.api + '/api/lines/unassigned'),
+              authFetch(this.api + '/api/institute-balances'),
             ]);
             const data = await ar.json();
             this.accounts = data.accounts || [];
             this.accountsTotal = data.total || 0;
             this.unassignedLines = ur.ok ? await ur.json() : [];
+            this.instituteBalances = ibr.ok ? await ibr.json() : {};
             this.dispoInstitutes = [...new Set(this.accounts.map(a => a.institute).filter(Boolean))].sort();
           } finally {
             this.accountsLoading = false;
             this.$nextTick(()=> this.drawSparklines());
           }
+        },
+
+        async editInstituteBalance(institute){
+          const cur = this.instituteBalances[institute];
+          const val = await this.promptMsg('Echten Kontostand bei ' + institute + ' eingeben (leer = löschen):', 'Echter Kontostand', cur != null ? cur : '');
+          if(val === null) return;
+          const num = val.trim() === '' ? null : parseFloat(val.replace(',','.'));
+          if(val.trim() !== '' && isNaN(num)){ await this.alertMsg('Ungültiger Betrag'); return; }
+          const res = await authFetch(this.api + '/api/institute-balances/' + encodeURIComponent(institute), {
+            method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({real_balance: num})
+          });
+          if(!res.ok){ await this.alertMsg('Speichern fehlgeschlagen'); return; }
+          await this.loadAccounts();
+          this.dispoInstituteChanged();
         },
 
         drawSparklines(){
@@ -2703,7 +2727,7 @@
           if (a.id) this.loadAccountDetail(a.id);
         },
         newAccountModal(){
-          this.openAccountModal({id:null, name:'', institute:'', icon:'🏦', real_balance:null});
+          this.openAccountModal({id:null, name:'', institute:'', icon:'🏦'});
         },
         closeAccountModal(){
           this.currentAccount = null;
@@ -2731,7 +2755,6 @@
             name: this.currentAccount.name,
             institute: this.currentAccount.institute || '',
             icon: this.currentAccount.icon || '🏦',
-            real_balance: (this.currentAccount.real_balance != null && this.currentAccount.real_balance !== '') ? Number(this.currentAccount.real_balance) : null,
           };
           const res = await authFetch(url, {
             method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
@@ -2918,10 +2941,8 @@
         dispoInstituteChanged(){
           this.dispoResult = null;
           if(!this.dispoInstitute) return;
-          const accs = this.accounts.filter(a => a.institute === this.dispoInstitute && a.real_balance != null);
-          if(accs.length > 0){
-            this.dispoBalance = Math.round(accs.reduce((s,a) => s + a.real_balance, 0) * 100) / 100;
-          }
+          const rb = this.instituteBalances[this.dispoInstitute];
+          if(rb != null) this.dispoBalance = rb;
         },
 
         async calcDispo(){

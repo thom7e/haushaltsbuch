@@ -43,7 +43,7 @@ def _atomic_write(path: str, payload: dict):
     os.replace(tmp, path)
 
 def _empty_db() -> dict:
-    return {"lines": [], "users": [], "accounts": [], "bookings": [], "recurring_rules": [], "version": 1}
+    return {"lines": [], "users": [], "accounts": [], "bookings": [], "recurring_rules": [], "institute_balances": {}, "version": 1}
 
 def ensure_db_shapes(data: dict) -> dict:
     if not isinstance(data, dict):
@@ -53,6 +53,7 @@ def ensure_db_shapes(data: dict) -> dict:
     data.setdefault("accounts", [])
     data.setdefault("bookings", [])
     data.setdefault("recurring_rules", [])
+    data.setdefault("institute_balances", {})
     data.setdefault("version", 1)
     return data
 
@@ -126,10 +127,6 @@ def normalize_account(raw: dict, user_id: Optional[str] = None) -> dict:
     except (TypeError, ValueError):
         a["sort_order"] = 0.0
     a["archived"] = bool(a.get("archived", False))
-    try:
-        a["real_balance"] = float(a["real_balance"]) if a.get("real_balance") is not None else None
-    except (TypeError, ValueError):
-        a["real_balance"] = None
     return a
 
 def normalize_booking(raw: dict, account_id: Optional[str] = None) -> dict:
@@ -869,11 +866,6 @@ def update_account(account_id: str, payload: dict = Body(...), user=Depends(get_
             pass
     if "archived" in payload:
         cur["archived"] = bool(payload.get("archived"))
-    if "real_balance" in payload:
-        try:
-            cur["real_balance"] = float(payload["real_balance"]) if payload.get("real_balance") is not None else None
-        except (TypeError, ValueError):
-            pass
     cur["user_id"] = user["id"]
     data["accounts"][idx] = cur
     write_db(data)
@@ -888,6 +880,38 @@ def delete_account(account_id: str, user=Depends(get_current_user)):
     data["accounts"].pop(idx)
     data["bookings"] = [b for b in data["bookings"] if b.get("account_id") != account_id]
     data["recurring_rules"] = [r for r in data["recurring_rules"] if r.get("account_id") != account_id]
+    write_db(data)
+    return {"ok": True}
+
+@app.get("/api/institute-balances")
+def get_institute_balances(user=Depends(get_current_user)):
+    data = read_db()
+    user_institutes = {
+        a.get("institute") for a in data["accounts"]
+        if a.get("user_id") == user["id"] and a.get("institute")
+    }
+    balances = {k: v for k, v in (data.get("institute_balances") or {}).items() if k in user_institutes}
+    return balances
+
+@app.put("/api/institute-balances/{institute}")
+def set_institute_balance(institute: str, payload: dict = Body(...), user=Depends(get_current_user)):
+    data = read_db()
+    user_institutes = {
+        a.get("institute") for a in data["accounts"]
+        if a.get("user_id") == user["id"] and a.get("institute")
+    }
+    if institute not in user_institutes:
+        raise HTTPException(404, "Institut nicht gefunden")
+    if not isinstance(data.get("institute_balances"), dict):
+        data["institute_balances"] = {}
+    val = payload.get("real_balance")
+    if val is None:
+        data["institute_balances"].pop(institute, None)
+    else:
+        try:
+            data["institute_balances"][institute] = float(val)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Ungültiger Betrag")
     write_db(data)
     return {"ok": True}
 
