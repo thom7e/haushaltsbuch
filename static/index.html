@@ -1788,11 +1788,14 @@
                     </div>
                     <div x-show="editingRecurring.source==='linked'" class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                       <label style="min-width:120px;flex:0 0 auto;">Posten</label>
-                      <select style="flex:1" x-model="editingRecurring.linked_line_id">
+                      <div style="flex:1;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;">
                         <template x-for="l in lines" :key="'er-'+l.id">
-                          <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                          <label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;">
+                            <input type="checkbox" style="width:auto;" :checked="editingRecurring.linked_line_ids.includes(l.id)" @change="toggleLineId(editingRecurring, l.id)">
+                            <span x-text="l.label + ' (' + fmt(total(l)) + ')'"></span>
+                          </label>
                         </template>
-                      </select>
+                      </div>
                     </div>
                     <div x-show="editingRecurring.source==='manual'">
                       <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
@@ -1861,12 +1864,14 @@
                 </div>
                 <div x-show="newRecurring.source==='linked'" class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                   <label style="min-width:120px;flex:0 0 auto;">Posten</label>
-                  <select style="flex:1" x-model="newRecurring.linked_line_id">
-                    <option value="">Bitte wählen…</option>
+                  <div style="flex:1;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;">
                     <template x-for="l in lines" :key="'rl-'+l.id">
-                      <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                      <label style="display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;">
+                        <input type="checkbox" style="width:auto;" :checked="newRecurring.linked_line_ids.includes(l.id)" @change="toggleLineId(newRecurring, l.id)">
+                        <span x-text="l.label + ' (' + fmt(total(l)) + ')'"></span>
+                      </label>
                     </template>
-                  </select>
+                  </div>
                 </div>
                 <div x-show="newRecurring.source==='manual'">
                   <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
@@ -2009,7 +2014,7 @@
         addRecurringOpen: false,
         editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
-        newRecurring: {source:'linked', linked_line_id:'', manual_label:'', manual_amount:null, day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[]},
+        newRecurring: {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[]},
 
         categoriesServer: [],
         sessionCategories: [],
@@ -2642,7 +2647,7 @@
 
         async addRecurring(){
           if(!this.currentAccount?.id) return;
-          if(this.newRecurring.source === 'linked' && !this.newRecurring.linked_line_id){ await this.alertMsg('Bitte einen Posten aus dem Haushaltsbuch wählen.', 'Pflichtfeld'); return; }
+          if(this.newRecurring.source === 'linked' && !this.newRecurring.linked_line_ids.length){ await this.alertMsg('Bitte mindestens einen Posten aus dem Haushaltsbuch wählen.', 'Pflichtfeld'); return; }
           if(this.newRecurring.source === 'manual' && (!this.newRecurring.manual_label || this.newRecurring.manual_amount == null)){ await this.alertMsg('Bitte Bezeichnung und Betrag eingeben.', 'Pflichtfeld'); return; }
           const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/recurring', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -2658,8 +2663,8 @@
         editRecurringOpen(r){
           this.editingRecurring = {
             id: r.id,
-            source: r.linked_line_id ? 'linked' : 'manual',
-            linked_line_id: r.linked_line_id || '',
+            source: (r.linked_line_ids?.length || r.linked_line_id) ? 'linked' : 'manual',
+            linked_line_ids: [...(r.linked_line_ids || (r.linked_line_id ? [r.linked_line_id] : []))],
             manual_label: r.manual_label || '',
             manual_amount: r.manual_amount ?? null,
             day_of_month: r.day_of_month,
@@ -2679,6 +2684,12 @@
           return `jeden ${d}. im Monat`;
         },
 
+        toggleLineId(obj, id){
+          const i = obj.linked_line_ids.indexOf(id);
+          if (i >= 0) obj.linked_line_ids.splice(i, 1); else obj.linked_line_ids.push(id);
+          obj.linked_line_ids = [...obj.linked_line_ids];
+        },
+
         toggleMonth(obj, m){
           const i = obj.months.indexOf(m);
           if (i >= 0) obj.months.splice(i, 1); else obj.months.push(m);
@@ -2690,7 +2701,7 @@
           const res = await authFetch(this.api + '/api/recurring/' + r.id, {
             method:'PUT', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
-              linked_line_id: r.source === 'linked' ? r.linked_line_id : null,
+              linked_line_ids: r.source === 'linked' ? r.linked_line_ids : [],
               manual_label: r.source === 'manual' ? r.manual_label : null,
               manual_amount: r.source === 'manual' ? r.manual_amount : null,
               day_of_month: r.day_of_month,
