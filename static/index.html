@@ -1880,10 +1880,29 @@
                       <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
                       <input type="number" min="1" max="28" style="width:90px;" x-model.number="editingRecurring.day_of_month" />
                     </div>
-                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                      <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
-                      <input type="date" style="flex:1" x-model="editingRecurring.start_date" />
-                    </div>
+                    <template x-if="editingRecurring.frequency === 'yearly'">
+                      <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                        <label style="min-width:120px;flex:0 0 auto;">Fälligkeitsmonat</label>
+                        <select style="flex:1" x-model.number="editingRecurring.billing_month">
+                          <option value="">Monat wählen…</option>
+                          <template x-for="(mo,i) in ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']" :key="i">
+                            <option :value="i+1" x-text="mo"></option>
+                          </template>
+                        </select>
+                      </div>
+                    </template>
+                    <template x-if="editingRecurring.frequency !== 'yearly'">
+                      <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                        <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
+                        <input type="date" style="flex:1" x-model="editingRecurring.start_date" />
+                      </div>
+                    </template>
+                    <template x-if="editingRecurring.source==='linked' && freqMultiplierLabel(editingRecurring.frequency)">
+                      <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                        <label style="min-width:120px;flex:0 0 auto;color:var(--muted)">Jahresbetrag</label>
+                        <span style="padding:10px 12px;font-weight:700;color:var(--acc-expense)" x-text="freqMultiplierLabel(editingRecurring.frequency) + ' × ' + fmt(computedRecurringAmount(editingRecurring) / (editingRecurring.frequency==='yearly'?12:3)) + ' = ' + fmt(computedRecurringAmount(editingRecurring))"></span>
+                      </div>
+                    </template>
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                       <label style="min-width:120px;flex:0 0 auto;">Typ</label>
                       <select style="flex:1" x-model="editingRecurring.rule_type">
@@ -1956,10 +1975,29 @@
                   <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
                   <input type="number" min="1" max="28" style="width:90px;" x-model.number="newRecurring.day_of_month" />
                 </div>
-                <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                  <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
-                  <input type="date" style="flex:1" x-model="newRecurring.start_date" />
-                </div>
+                <template x-if="newRecurring.frequency === 'yearly'">
+                  <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                    <label style="min-width:120px;flex:0 0 auto;">Fälligkeitsmonat</label>
+                    <select style="flex:1" x-model.number="newRecurring.billing_month">
+                      <option value="">Monat wählen…</option>
+                      <template x-for="(mo,i) in ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']" :key="i">
+                        <option :value="i+1" x-text="mo"></option>
+                      </template>
+                    </select>
+                  </div>
+                </template>
+                <template x-if="newRecurring.frequency !== 'yearly'">
+                  <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                    <label style="min-width:120px;flex:0 0 auto;">Ab Datum</label>
+                    <input type="date" style="flex:1" x-model="newRecurring.start_date" />
+                  </div>
+                </template>
+                <template x-if="newRecurring.source==='linked' && freqMultiplierLabel(newRecurring.frequency)">
+                  <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                    <label style="min-width:120px;flex:0 0 auto;color:var(--muted)">Jahresbetrag</label>
+                    <span style="padding:10px 12px;font-weight:700;color:var(--acc-expense)" x-text="freqMultiplierLabel(newRecurring.frequency) + ' × ' + fmt(computedRecurringAmount(newRecurring) / (newRecurring.frequency==='yearly'?12:3)) + ' = ' + fmt(computedRecurringAmount(newRecurring))"></span>
+                  </div>
+                </template>
                 <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                   <label style="min-width:120px;flex:0 0 auto;">Typ</label>
                   <select style="flex:1" x-model="newRecurring.rule_type">
@@ -2089,7 +2127,7 @@
         addRecurringOpen: false,
         editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
-        newRecurring: {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[]},
+        newRecurring: {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[], billing_month:null},
 
         categoriesServer: [],
         sessionCategories: [],
@@ -2644,7 +2682,7 @@
           this.accountRecurring = [];
           this.addRecurringOpen = false;
           this.newBooking = {date: this.todayISO(), amount:null, note:''};
-          this.newRecurring = {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
+          this.newRecurring = {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[], billing_month:null};
           document.body.classList.add('no-scroll');
           if (a.id) this.loadAccountDetail(a.id);
         },
@@ -2728,18 +2766,45 @@
           if(!this.currentAccount?.id) return;
           if(this.newRecurring.source === 'linked' && !(this.newRecurring.linked_line_ids||[]).length){ await this.alertMsg('Bitte mindestens einen Posten aus dem Haushaltsbuch wählen.', 'Pflichtfeld'); return; }
           if(this.newRecurring.source === 'manual' && (!this.newRecurring.manual_label || this.newRecurring.manual_amount == null)){ await this.alertMsg('Bitte Bezeichnung und Betrag eingeben.', 'Pflichtfeld'); return; }
+          if(this.newRecurring.frequency === 'yearly' && !this.newRecurring.billing_month){ await this.alertMsg('Bitte den Fälligkeitsmonat wählen.', 'Pflichtfeld'); return; }
+          const payload = {...this.newRecurring};
+          if(payload.frequency === 'yearly' && payload.billing_month)
+            payload.start_date = this.billingMonthToStartDate(payload.billing_month, payload.day_of_month);
           const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/recurring', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(this.newRecurring)
+            body: JSON.stringify(payload)
           });
           if(!res.ok){ await this.alertMsg('Dauerauftrag konnte nicht gespeichert werden'); return; }
           this.addRecurringOpen = false;
-          this.newRecurring = {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
+          this.newRecurring = {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[], billing_month:null};
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
         },
 
+        billingMonthToStartDate(month, dayOfMonth){
+          const now = new Date();
+          const curMonth = now.getMonth() + 1;
+          let year = now.getFullYear();
+          if (month < curMonth || (month === curMonth && dayOfMonth <= now.getDate())) year++;
+          return `${year}-${String(month).padStart(2,'0')}-01`;
+        },
+
+        freqMultiplierLabel(freq){
+          if (freq === 'yearly') return '12';
+          if (freq === 'quarterly') return '3';
+          return null;
+        },
+
+        computedRecurringAmount(obj){
+          const ids = obj.linked_line_ids || [];
+          const base = this.lines.filter(l => ids.includes(l.id)).reduce((s,l) => s + this.total(l), 0);
+          const mult = obj.frequency === 'yearly' ? 12 : obj.frequency === 'quarterly' ? 3 : 1;
+          return base * mult;
+        },
+
         editRecurringOpen(r){
+          const freq = r.frequency || 'monthly';
+          const billingMonth = freq === 'yearly' && r.start_date ? parseInt(r.start_date.slice(5,7)) : null;
           this.editingRecurring = {
             id: r.id,
             source: (r.linked_line_ids?.length || r.linked_line_id) ? 'linked' : 'manual',
@@ -2749,8 +2814,9 @@
             day_of_month: r.day_of_month,
             start_date: r.start_date,
             rule_type: r.rule_type || 'Dauerauftrag',
-            frequency: r.frequency || 'monthly',
+            frequency: freq,
             months: [...(r.months || [])],
+            billing_month: billingMonth,
           };
         },
 
@@ -2778,6 +2844,9 @@
 
         async saveRecurring(){
           const r = this.editingRecurring;
+          let start_date = r.start_date;
+          if(r.frequency === 'yearly' && r.billing_month)
+            start_date = this.billingMonthToStartDate(r.billing_month, r.day_of_month);
           const res = await authFetch(this.api + '/api/recurring/' + r.id, {
             method:'PUT', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
@@ -2785,7 +2854,7 @@
               manual_label: r.source === 'manual' ? r.manual_label : null,
               manual_amount: r.source === 'manual' ? r.manual_amount : null,
               day_of_month: r.day_of_month,
-              start_date: r.start_date,
+              start_date,
               rule_type: r.rule_type,
               frequency: r.frequency,
               months: r.months,
