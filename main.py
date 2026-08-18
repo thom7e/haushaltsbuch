@@ -384,7 +384,7 @@ os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 _INDEX = os.path.join(static_dir, "index.html")
-_NO_CACHE = {"Cache-Control": "no-store"}
+_NO_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
 
 @app.get("/")
 def root():
