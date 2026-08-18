@@ -2565,7 +2565,7 @@
           this.accountRecurring = [];
           this.addRecurringOpen = false;
           this.newBooking = {date: this.todayISO(), amount:null, note:''};
-          this.newRecurring = {source:'linked', linked_line_id:'', manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
+          this.newRecurring = {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
           document.body.classList.add('no-scroll');
           if (a.id) this.loadAccountDetail(a.id);
         },
@@ -2655,7 +2655,7 @@
           });
           if(!res.ok){ await this.alertMsg('Dauerauftrag konnte nicht gespeichert werden'); return; }
           this.addRecurringOpen = false;
-          this.newRecurring = {source:'linked', linked_line_id:'', manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
+          this.newRecurring = {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
         },
