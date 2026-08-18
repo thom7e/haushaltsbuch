@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
@@ -372,6 +373,15 @@ async def lifespan(app_: FastAPI):
 
 app = FastAPI(title="Haushaltsbuch", version="1.0.0", lifespan=lifespan)
 
+class NoCacheHtmlMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if "text/html" in response.headers.get("content-type", ""):
+            response.headers["cache-control"] = "no-cache, must-revalidate"
+            response.headers["pragma"] = "no-cache"
+        return response
+
+app.add_middleware(NoCacheHtmlMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
