@@ -1152,7 +1152,7 @@ def disposchutz(
     for rule, linked, mult in income_rules:
         add_rule_to_timeline(rule, linked, mult, True)
 
-    items.sort(key=lambda x: x["date"])
+    items.sort(key=lambda x: (x["date"], 0 if x["is_income"] else 1))
 
     # Running balance
     running = balance
