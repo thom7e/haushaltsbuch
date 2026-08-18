@@ -1217,6 +1217,27 @@ def disposchutz(
         if not item["is_income"]:
             min_balance = min(min_balance, running)
 
+    # Monthly reserves for yearly/quarterly expense rules (their base_amount = monthly portion)
+    reserves_detail = []
+    monthly_reserves = 0.0
+    for rule, linked, mult in expense_rules:
+        if rule["frequency"] not in ("yearly", "quarterly"):
+            continue
+        if linked:
+            base_amt = sum(account_deposit_amount(l) for l in linked)
+            label = ", ".join(normalize_line(l).get("label", "") for l in linked)
+        else:
+            base_amt = float(rule.get("manual_amount") or 0) / mult
+            label = rule.get("manual_label") or ""
+        monthly_reserves += base_amt
+        reserves_detail.append({
+            "label": label,
+            "monthly_amount": round(base_amt, 2),
+            "frequency": rule["frequency"],
+        })
+    monthly_reserves = round(monthly_reserves, 2)
+    transferable = round(min_balance - monthly_reserves, 2)
+
     return {
         "institute": institute,
         "balance": balance,
@@ -1225,5 +1246,7 @@ def disposchutz(
         "items": items,
         "min_balance": round(min_balance, 2),
         "dispo_risk": min_balance < 0,
-        "transferable": round(min_balance, 2),
+        "monthly_reserves": monthly_reserves,
+        "reserves_detail": reserves_detail,
+        "transferable": transferable,
     }

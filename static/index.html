@@ -1625,12 +1625,34 @@
                       x-text="'→ ' + fmt(item.running_balance)"></span>
               </div>
             </template>
+            <!-- Monatsrücklagen für Jahres-/Quartalsausgaben -->
+            <template x-if="dispoResult.reserves_detail && dispoResult.reserves_detail.length > 0">
+              <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
+                <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;">Monatsrücklage Jahres-/Quartalsausgaben</div>
+                <template x-for="r in dispoResult.reserves_detail" :key="r.label">
+                  <div style="display:flex;gap:8px;padding:3px 0;font-size:12px;align-items:baseline;">
+                    <span style="flex:1;color:var(--muted)" x-text="r.label"></span>
+                    <span style="color:var(--muted);font-size:11px" x-text="r.frequency==='yearly'?'1×/Jahr':'1×/Quartal'"></span>
+                    <span style="min-width:80px;text-align:right;color:var(--acc-expense)" x-text="'−' + fmt(r.monthly_amount)"></span>
+                  </div>
+                </template>
+                <div style="display:flex;justify-content:flex-end;font-size:12px;color:var(--muted);margin-top:2px;border-top:1px solid var(--border);padding-top:4px;">
+                  <span x-text="'Gesamt: −' + fmt(dispoResult.monthly_reserves)"></span>
+                </div>
+              </div>
+            </template>
             <!-- Ergebnis -->
-            <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:13px;color:var(--muted)">jetzt sicher auf Trade Republic</span>
-              <span style="font-weight:800;font-size:22px;"
-                    :style="dispoResult.transferable >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'"
-                    x-text="fmt(dispoResult.transferable)"></span>
+            <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">
+                <span style="font-size:12px;color:var(--muted)">Tiefstand nach Einnahmen</span>
+                <span style="font-size:13px;color:var(--muted)" x-text="fmt(dispoResult.min_balance)"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:13px;color:var(--muted)">jetzt sicher auf Trade Republic</span>
+                <span style="font-weight:800;font-size:22px;"
+                      :style="dispoResult.transferable >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'"
+                      x-text="fmt(dispoResult.transferable)"></span>
+              </div>
             </div>
           </div>
         </template>
