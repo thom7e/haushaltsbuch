@@ -1767,8 +1767,8 @@
               <div>
                 <div class="booking-row" style="align-items:center;">
                   <div style="flex:1;min-width:0;">
-                    <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · jeden ' + r.day_of_month + '. im Monat'"></div>
-                    <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · aktuell ' + fmt(r.line_amount) + ' pro Monat')"></div>
+                    <div x-text="(r.line_missing ? '⚠️ Posten gelöscht' : r.line_label) + ' · ' + recurringLabel(r)"></div>
+                    <div class="muted" style="font-size:12px" x-text="(r.rule_type || 'Dauerauftrag') + (r.line_missing ? '' : ' · ' + fmt(r.line_amount))"></div>
                   </div>
                   <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;width:auto;">
                     <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
@@ -1802,6 +1802,28 @@
                         <option value="Lastschrift">Lastschrift</option>
                       </select>
                     </div>
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Häufigkeit</label>
+                      <select style="flex:1" x-model="editingRecurring.frequency">
+                        <option value="monthly">Jeden Monat</option>
+                        <option value="quarterly">Jedes Quartal</option>
+                        <option value="yearly">1x im Jahr</option>
+                        <option value="custom">Einzelne Monate</option>
+                      </select>
+                    </div>
+                    <template x-if="editingRecurring.frequency==='custom'">
+                      <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                        <label style="min-width:120px;flex:0 0 auto;">Monate</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1;">
+                          <template x-for="(mo,i) in ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']" :key="i">
+                            <label style="display:flex;align-items:center;gap:3px;cursor:pointer;min-width:44px;">
+                              <input type="checkbox" style="width:auto;" :checked="editingRecurring.months.includes(i+1)" @change="toggleMonth(editingRecurring,i+1)">
+                              <span x-text="mo"></span>
+                            </label>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
                     <div class="controls-row" style="justify-content:flex-end;gap:8px;">
                       <button type="button" style="flex:0 0 auto;width:auto;" @click="editingRecurring=null">Abbrechen</button>
                       <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto;" @click="saveRecurring()">Speichern</button>
@@ -1837,6 +1859,28 @@
                     <option value="Lastschrift">Lastschrift</option>
                   </select>
                 </div>
+                <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                  <label style="min-width:120px;flex:0 0 auto;">Häufigkeit</label>
+                  <select style="flex:1" x-model="newRecurring.frequency">
+                    <option value="monthly">Jeden Monat</option>
+                    <option value="quarterly">Jedes Quartal</option>
+                    <option value="yearly">1x im Jahr</option>
+                    <option value="custom">Einzelne Monate</option>
+                  </select>
+                </div>
+                <template x-if="newRecurring.frequency==='custom'">
+                  <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                    <label style="min-width:120px;flex:0 0 auto;">Monate</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1;">
+                      <template x-for="(mo,i) in ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']" :key="i">
+                        <label style="display:flex;align-items:center;gap:3px;cursor:pointer;min-width:44px;">
+                          <input type="checkbox" style="width:auto;" :checked="newRecurring.months.includes(i+1)" @change="toggleMonth(newRecurring,i+1)">
+                          <span x-text="mo"></span>
+                        </label>
+                      </template>
+                    </div>
+                  </div>
+                </template>
                 <div class="controls-row" style="justify-content:flex-end;">
                   <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="addRecurring()">Anlegen</button>
                 </div>
@@ -1931,7 +1975,7 @@
         addRecurringOpen: false,
         editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
-        newRecurring: {linked_line_id:'', day_of_month:1, start_date:'', rule_type:'Dauerauftrag'},
+        newRecurring: {linked_line_id:'', day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[]},
 
         categoriesServer: [],
         sessionCategories: [],
@@ -2571,7 +2615,7 @@
           });
           if(!res.ok){ await this.alertMsg('Dauerauftrag konnte nicht gespeichert werden'); return; }
           this.addRecurringOpen = false;
-          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag'};
+          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
         },
@@ -2583,7 +2627,24 @@
             day_of_month: r.day_of_month,
             start_date: r.start_date,
             rule_type: r.rule_type || 'Dauerauftrag',
+            frequency: r.frequency || 'monthly',
+            months: [...(r.months || [])],
           };
+        },
+
+        recurringLabel(r){
+          const mn = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+          const d = r.day_of_month;
+          if (r.frequency === 'quarterly') return `jeden ${d}. quartalsweise`;
+          if (r.frequency === 'yearly')    return `jährlich am ${d}.`;
+          if (r.frequency === 'custom')    return `${d}. in ${(r.months||[]).map(m=>mn[m-1]).join(', ')||'–'}`;
+          return `jeden ${d}. im Monat`;
+        },
+
+        toggleMonth(obj, m){
+          const i = obj.months.indexOf(m);
+          if (i >= 0) obj.months.splice(i, 1); else obj.months.push(m);
+          obj.months = [...obj.months].sort((a,b)=>a-b);
         },
 
         async saveRecurring(){
@@ -2595,6 +2656,8 @@
               day_of_month: r.day_of_month,
               start_date: r.start_date,
               rule_type: r.rule_type,
+              frequency: r.frequency,
+              months: r.months,
             })
           });
           if(!res.ok){ await this.alertMsg('Speichern fehlgeschlagen'); return; }

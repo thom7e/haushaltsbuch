@@ -172,6 +172,12 @@ def normalize_recurring_rule(raw: dict, account_id: Optional[str] = None) -> dic
             ed = None
     r["end_date"] = ed
     r["rule_type"] = r.get("rule_type") if r.get("rule_type") in ("Dauerauftrag", "Lastschrift") else "Dauerauftrag"
+    r["frequency"] = r.get("frequency") if r.get("frequency") in ("monthly", "quarterly", "yearly", "custom") else "monthly"
+    raw_months = r.get("months")
+    if isinstance(raw_months, list):
+        r["months"] = sorted({int(mo) for mo in raw_months if str(mo).isdigit() and 1 <= int(mo) <= 12})
+    else:
+        r["months"] = []
     return r
 
 def migrate_db(data: dict) -> dict:
@@ -198,6 +204,23 @@ def migrate_db(data: dict) -> dict:
 
 def account_deposit_amount(line: dict) -> float:
     return abs(total_of_line(normalize_line(line)))
+
+def _should_trigger(rule: dict, y: int, m: int) -> bool:
+    freq = rule.get("frequency", "monthly")
+    if freq == "quarterly":
+        try:
+            start = date.fromisoformat(rule["start_date"])
+            return ((y - start.year) * 12 + (m - start.month)) % 3 == 0
+        except (ValueError, TypeError):
+            return True
+    if freq == "yearly":
+        try:
+            return m == date.fromisoformat(rule["start_date"]).month
+        except (ValueError, TypeError):
+            return True
+    if freq == "custom":
+        return m in (rule.get("months") or [])
+    return True  # monthly
 
 def run_recurring_catchup(user_id: str, data: dict) -> bool:
     """Erzeugt fehlende automatische Buchungen für aktive Daueraufträge des Users.
@@ -247,7 +270,7 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
         while (y, m) <= (today.year, today.month):
             occurrence = date(y, m, rule["day_of_month"])
             in_range = occurrence >= start and occurrence <= today and (end is None or occurrence <= end)
-            if in_range and (y, m) not in existing_months:
+            if in_range and (y, m) not in existing_months and _should_trigger(rule, y, m):
                 booking = normalize_booking({
                     "date": occurrence.isoformat(),
                     "amount": account_deposit_amount(line),
@@ -938,6 +961,11 @@ def update_recurring(rule_id: str, payload: dict = Body(...), user=Depends(get_c
             cur["end_date"] = None
     if "rule_type" in payload and payload.get("rule_type") in ("Dauerauftrag", "Lastschrift"):
         cur["rule_type"] = payload["rule_type"]
+    if "frequency" in payload and payload.get("frequency") in ("monthly", "quarterly", "yearly", "custom"):
+        cur["frequency"] = payload["frequency"]
+    if "months" in payload:
+        raw = payload.get("months")
+        cur["months"] = sorted({int(mo) for mo in (raw or []) if str(mo).isdigit() and 1 <= int(mo) <= 12})
 
     data["recurring_rules"][idx] = cur
     write_db(data)
