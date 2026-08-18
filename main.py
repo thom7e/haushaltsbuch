@@ -178,6 +178,11 @@ def normalize_recurring_rule(raw: dict, account_id: Optional[str] = None) -> dic
         r["months"] = sorted({int(mo) for mo in raw_months if str(mo).isdigit() and 1 <= int(mo) <= 12})
     else:
         r["months"] = []
+    r["manual_label"] = str(r["manual_label"]).strip() if r.get("manual_label") else None
+    try:
+        r["manual_amount"] = float(r["manual_amount"]) if r.get("manual_amount") is not None else None
+    except (TypeError, ValueError):
+        r["manual_amount"] = None
     return r
 
 def migrate_db(data: dict) -> dict:
@@ -241,7 +246,7 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
             continue
 
         line = lines_by_id.get(rule["linked_line_id"])
-        if not line:
+        if not line and not (rule.get("manual_label") and rule.get("manual_amount") is not None):
             rule["active"] = False
             changed = True
             continue
@@ -271,10 +276,12 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
             occurrence = date(y, m, rule["day_of_month"])
             in_range = occurrence >= start and occurrence <= today and (end is None or occurrence <= end)
             if in_range and (y, m) not in existing_months and _should_trigger(rule, y, m):
+                b_amount = account_deposit_amount(line) if line else float(rule["manual_amount"])
+                b_note = (line.get("label") or "") if line else (rule["manual_label"] or "")
                 booking = normalize_booking({
                     "date": occurrence.isoformat(),
-                    "amount": account_deposit_amount(line),
-                    "note": line.get("label") or "",
+                    "amount": b_amount,
+                    "note": b_note,
                     "source": "recurring",
                     "recurring_rule_id": rule["id"],
                 }, account_id=rule["account_id"])
@@ -894,23 +901,30 @@ def list_recurring(account_id: str, user=Depends(get_current_user)):
     out = []
     for r in rules:
         line = lines_by_id.get(r["linked_line_id"])
-        out.append({
-            **r,
-            "line_label": line.get("label") if line else None,
-            "line_amount": account_deposit_amount(line) if line else None,
-            "line_missing": line is None,
-        })
+        if line:
+            lbl, amt, missing = line.get("label"), account_deposit_amount(line), False
+        elif r.get("manual_label"):
+            lbl, amt, missing = r["manual_label"], r.get("manual_amount"), False
+        else:
+            lbl, amt, missing = None, None, True
+        out.append({**r, "line_label": lbl, "line_amount": amt, "line_missing": missing})
     return out
 
 @app.post("/api/accounts/{account_id}/recurring")
 def create_recurring(account_id: str, payload: dict = Body(...), user=Depends(get_current_user)):
     data = read_db()
     _require_account(data, account_id, user["id"])
-    line = next((l for l in data["lines"] if l.get("id") == payload.get("linked_line_id") and l.get("user_id") == user["id"]), None)
-    if not line:
-        raise HTTPException(422, "Gültige 'linked_line_id' ist erforderlich.")
+    line = None
+    if payload.get("linked_line_id"):
+        line = next((l for l in data["lines"] if l.get("id") == payload["linked_line_id"] and l.get("user_id") == user["id"]), None)
+        if not line:
+            raise HTTPException(422, "Ungültige 'linked_line_id'.")
+    if not line and not (payload.get("manual_label") and payload.get("manual_amount") is not None):
+        raise HTTPException(422, "Entweder 'linked_line_id' oder 'manual_label' + 'manual_amount' erforderlich.")
     r = normalize_recurring_rule({
-        "linked_line_id": line["id"],
+        "linked_line_id": line["id"] if line else None,
+        "manual_label": payload.get("manual_label"),
+        "manual_amount": payload.get("manual_amount"),
         "day_of_month": payload.get("day_of_month"),
         "active": payload.get("active", True),
         "start_date": payload.get("start_date"),
@@ -932,10 +946,22 @@ def update_recurring(rule_id: str, payload: dict = Body(...), user=Depends(get_c
         raise HTTPException(404, "Dauerauftrag nicht gefunden")
 
     if "linked_line_id" in payload:
-        line = next((l for l in data["lines"] if l.get("id") == payload.get("linked_line_id") and l.get("user_id") == user["id"]), None)
-        if not line:
-            raise HTTPException(422, "Gültige 'linked_line_id' ist erforderlich.")
-        cur["linked_line_id"] = line["id"]
+        if payload.get("linked_line_id"):
+            line = next((l for l in data["lines"] if l.get("id") == payload["linked_line_id"] and l.get("user_id") == user["id"]), None)
+            if not line:
+                raise HTTPException(422, "Ungültige 'linked_line_id'.")
+            cur["linked_line_id"] = line["id"]
+            cur["manual_label"] = None
+            cur["manual_amount"] = None
+        else:
+            cur["linked_line_id"] = None
+    if "manual_label" in payload:
+        cur["manual_label"] = str(payload["manual_label"]).strip() if payload.get("manual_label") else None
+    if "manual_amount" in payload:
+        try:
+            cur["manual_amount"] = float(payload["manual_amount"]) if payload.get("manual_amount") is not None else None
+        except (TypeError, ValueError):
+            pass
     if "day_of_month" in payload:
         try:
             cur["day_of_month"] = min(max(int(payload.get("day_of_month")), 1), 28)

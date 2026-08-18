@@ -1780,13 +1780,34 @@
                 <template x-if="editingRecurring?.id === r.id">
                   <div class="card" style="margin:4px 0 8px;">
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                      <label style="min-width:120px;flex:0 0 auto;">Posten</label>
-                      <select style="flex:1" x-model="editingRecurring.linked_line_id">
-                        <template x-for="l in lines" :key="'er-'+l.id">
-                          <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
-                        </template>
+                      <label style="min-width:120px;flex:0 0 auto;">Quelle</label>
+                      <select style="flex:1" x-model="editingRecurring.source">
+                        <option value="linked">Aus Haushaltsbuch</option>
+                        <option value="manual">Manuell eingeben</option>
                       </select>
                     </div>
+                    <template x-if="editingRecurring.source==='linked'">
+                      <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                        <label style="min-width:120px;flex:0 0 auto;">Posten</label>
+                        <select style="flex:1" x-model="editingRecurring.linked_line_id">
+                          <template x-for="l in lines" :key="'er-'+l.id">
+                            <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                          </template>
+                        </select>
+                      </div>
+                    </template>
+                    <template x-if="editingRecurring.source==='manual'">
+                      <div>
+                        <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                          <label style="min-width:120px;flex:0 0 auto;">Bezeichnung</label>
+                          <input style="flex:1" type="text" placeholder="z.B. Spotify" x-model="editingRecurring.manual_label" />
+                        </div>
+                        <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                          <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
+                          <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="editingRecurring.manual_amount" />
+                        </div>
+                      </div>
+                    </template>
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                       <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
                       <input type="number" min="1" max="28" style="width:90px;" x-model.number="editingRecurring.day_of_month" />
@@ -1836,14 +1857,35 @@
             <template x-if="accountRecurring.length===0 || addRecurringOpen">
               <div class="card" style="margin-top:8px;">
                 <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                  <label style="min-width:120px;flex:0 0 auto;">Posten</label>
-                  <select style="flex:1" x-model="newRecurring.linked_line_id">
-                    <option value="">Bitte wählen…</option>
-                    <template x-for="l in lines" :key="'rl-'+l.id">
-                      <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
-                    </template>
+                  <label style="min-width:120px;flex:0 0 auto;">Quelle</label>
+                  <select style="flex:1" x-model="newRecurring.source">
+                    <option value="linked">Aus Haushaltsbuch</option>
+                    <option value="manual">Manuell eingeben</option>
                   </select>
                 </div>
+                <template x-if="newRecurring.source==='linked'">
+                  <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                    <label style="min-width:120px;flex:0 0 auto;">Posten</label>
+                    <select style="flex:1" x-model="newRecurring.linked_line_id">
+                      <option value="">Bitte wählen…</option>
+                      <template x-for="l in lines" :key="'rl-'+l.id">
+                        <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                      </template>
+                    </select>
+                  </div>
+                </template>
+                <template x-if="newRecurring.source==='manual'">
+                  <div>
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Bezeichnung</label>
+                      <input style="flex:1" type="text" placeholder="z.B. Spotify" x-model="newRecurring.manual_label" />
+                    </div>
+                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
+                      <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="newRecurring.manual_amount" />
+                    </div>
+                  </div>
+                </template>
                 <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                   <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
                   <input type="number" min="1" max="28" style="width:90px;" x-model.number="newRecurring.day_of_month" />
@@ -1975,7 +2017,7 @@
         addRecurringOpen: false,
         editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
-        newRecurring: {linked_line_id:'', day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[]},
+        newRecurring: {source:'linked', linked_line_id:'', manual_label:'', manual_amount:null, day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[]},
 
         categoriesServer: [],
         sessionCategories: [],
@@ -2615,7 +2657,7 @@
           });
           if(!res.ok){ await this.alertMsg('Dauerauftrag konnte nicht gespeichert werden'); return; }
           this.addRecurringOpen = false;
-          this.newRecurring = {linked_line_id:'', day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
+          this.newRecurring = {source:'linked', linked_line_id:'', manual_label:'', manual_amount:null, day_of_month:1, start_date: this.todayISO(), rule_type:'Dauerauftrag', frequency:'monthly', months:[]};
           await this.loadAccountDetail(this.currentAccount.id);
           await this.loadAccounts();
         },
@@ -2623,7 +2665,10 @@
         editRecurringOpen(r){
           this.editingRecurring = {
             id: r.id,
-            linked_line_id: r.linked_line_id,
+            source: r.linked_line_id ? 'linked' : 'manual',
+            linked_line_id: r.linked_line_id || '',
+            manual_label: r.manual_label || '',
+            manual_amount: r.manual_amount ?? null,
             day_of_month: r.day_of_month,
             start_date: r.start_date,
             rule_type: r.rule_type || 'Dauerauftrag',
@@ -2652,7 +2697,9 @@
           const res = await authFetch(this.api + '/api/recurring/' + r.id, {
             method:'PUT', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({
-              linked_line_id: r.linked_line_id,
+              linked_line_id: r.source === 'linked' ? r.linked_line_id : null,
+              manual_label: r.source === 'manual' ? r.manual_label : null,
+              manual_amount: r.source === 'manual' ? r.manual_amount : null,
               day_of_month: r.day_of_month,
               start_date: r.start_date,
               rule_type: r.rule_type,
