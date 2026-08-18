@@ -1171,12 +1171,18 @@ def disposchutz(
             y, m = y + 1, 1
         next_income = date(y, m, income_day)
 
-    # Build timeline: all rules (income + expense) between today and next_income (inclusive)
+    # Second income = one month after next_income
+    y2, m2 = next_income.year, next_income.month + 1
+    if m2 > 12: y2, m2 = y2 + 1, 1
+    income_after_next = date(y2, m2, income_day)
+
+    # Build timeline: today → income_after_next (two full income events)
     items = []
-    check_periods = {(today.year, today.month)}
-    y, m = today.year, today.month + 1
-    if m > 12: y, m = y + 1, 1
-    check_periods.add((y, m))
+    check_periods = set()
+    for step in range(3):
+        yy, mm = today.year, today.month + step
+        if mm > 12: yy, mm = yy + 1, mm - 12
+        check_periods.add((yy, mm))
 
     def add_rule_to_timeline(rule, linked, mult, is_income_rule):
         dom = rule["day_of_month"]
@@ -1184,12 +1190,11 @@ def disposchutz(
             if not _should_trigger(rule, ry, rm):
                 continue
             item_date = date(ry, rm, dom)
-            # expenses: today <= date < next_income; income: today <= date <= next_income
             if item_date < today:
                 continue
-            if is_income_rule and item_date > next_income:
+            if is_income_rule and item_date > income_after_next:
                 continue
-            if not is_income_rule and item_date >= next_income:
+            if not is_income_rule and item_date >= income_after_next:
                 continue
             if linked:
                 label = ", ".join(normalize_line(l).get("label", "") for l in linked)
@@ -1199,7 +1204,8 @@ def disposchutz(
                 label = rule.get("manual_label") or ""
                 amt = -float(rule.get("manual_amount") or 0)
             is_main = is_income_rule and item_date == next_income
-            items.append({"date": item_date.isoformat(), "day": dom, "label": label, "amount": round(amt, 2), "is_income": is_income_rule, "is_main_income": is_main})
+            is_phase2 = item_date > next_income
+            items.append({"date": item_date.isoformat(), "day": dom, "label": label, "amount": round(amt, 2), "is_income": is_income_rule, "is_main_income": is_main, "is_phase2": is_phase2})
 
     for rule, linked, mult in expense_rules:
         add_rule_to_timeline(rule, linked, mult, False)
@@ -1208,7 +1214,7 @@ def disposchutz(
 
     items.sort(key=lambda x: (x["date"], 0 if x["is_income"] else 1))
 
-    # Running balance
+    # Running balance — track min across both phases for full dispo check
     running = balance
     min_balance = balance
     for item in items:
@@ -1236,16 +1242,19 @@ def disposchutz(
             "frequency": rule["frequency"],
         })
     monthly_reserves = round(monthly_reserves, 2)
-    transferable = round(min_balance - monthly_reserves, 2)
+    # transferable = final balance after full cycle minus monthly reserves
+    transferable = round(running - monthly_reserves, 2)
 
     return {
         "institute": institute,
         "balance": balance,
         "income_day": income_day,
         "next_income_date": next_income.isoformat(),
+        "income_after_next_date": income_after_next.isoformat(),
         "items": items,
         "min_balance": round(min_balance, 2),
         "dispo_risk": min_balance < 0,
+        "final_balance": round(running, 2),
         "monthly_reserves": monthly_reserves,
         "reserves_detail": reserves_detail,
         "transferable": transferable,
