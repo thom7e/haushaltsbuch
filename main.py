@@ -1034,3 +1034,84 @@ def delete_recurring(rule_id: str, user=Depends(get_current_user)):
     data["recurring_rules"].pop(idx)
     write_db(data)
     return {"ok": True}
+
+@app.post("/api/recurring/{rule_id}/split")
+def split_recurring(rule_id: str, user=Depends(get_current_user)):
+    data = read_db()
+    idx = next((i for i, r in enumerate(data["recurring_rules"]) if r.get("id") == rule_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Dauerauftrag nicht gefunden")
+    raw = data["recurring_rules"][idx]
+    acc = next((a for a in data["accounts"] if a.get("id") == raw.get("account_id")), None)
+    if not acc or acc.get("user_id") != user["id"]:
+        raise HTTPException(404, "Dauerauftrag nicht gefunden")
+    rule = normalize_recurring_rule(raw)
+    ids = rule.get("linked_line_ids", [])
+    if len(ids) <= 1:
+        raise HTTPException(422, "Nur ein Posten — kein Split nötig")
+    new_rules = []
+    for lid in ids:
+        new_r = normalize_recurring_rule({**rule, "id": str(uuid.uuid4()), "linked_line_ids": [lid]})
+        new_rules.append(new_r)
+    data["recurring_rules"].pop(idx)
+    data["recurring_rules"].extend(new_rules)
+    write_db(data)
+    return {"created": len(new_rules)}
+
+@app.get("/api/surplus")
+def surplus_calc(
+    institute: str = Query(...),
+    balance: float = Query(...),
+    buffer: float = Query(0),
+    user=Depends(get_current_user),
+):
+    data = read_db()
+    today = date.today()
+    account_ids = {
+        a["id"] for a in data["accounts"]
+        if a.get("user_id") == user["id"] and (a.get("institute") or "") == institute
+    }
+    if not account_ids:
+        raise HTTPException(404, "Kein Konto für dieses Institut gefunden")
+    lines_by_id = {l["id"]: l for l in data["lines"] if l.get("user_id") == user["id"]}
+    pending_items = []
+    for r in data["recurring_rules"]:
+        if r.get("account_id") not in account_ids:
+            continue
+        rule = normalize_recurring_rule(r)
+        if not rule["active"]:
+            continue
+        if not _should_trigger(rule, today.year, today.month):
+            continue
+        if rule["day_of_month"] < today.day:
+            continue
+        linked = [lines_by_id[lid] for lid in rule.get("linked_line_ids", []) if lid in lines_by_id]
+        if linked:
+            for l in linked:
+                nl = normalize_line(l)
+                amt = total_of_line(nl)
+                signed = amt if nl["type"] == "income" else -amt
+                pending_items.append({
+                    "label": nl.get("label", ""),
+                    "day": rule["day_of_month"],
+                    "amount": round(signed, 2),
+                    "rule_type": rule.get("rule_type", "Dauerauftrag"),
+                })
+        elif rule.get("manual_label") and rule.get("manual_amount") is not None:
+            pending_items.append({
+                "label": rule["manual_label"],
+                "day": rule["day_of_month"],
+                "amount": round(-float(rule["manual_amount"]), 2),
+                "rule_type": rule.get("rule_type", "Dauerauftrag"),
+            })
+    pending_items.sort(key=lambda x: x["day"])
+    pending_total = round(sum(x["amount"] for x in pending_items), 2)
+    transferable = round(balance + pending_total - buffer, 2)
+    return {
+        "institute": institute,
+        "balance": balance,
+        "buffer": buffer,
+        "pending_items": pending_items,
+        "pending_total": pending_total,
+        "transferable": transferable,
+    }

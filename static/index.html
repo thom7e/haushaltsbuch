@@ -1573,6 +1573,47 @@
           </div>
         </div>
       </template>
+
+      <!-- Überschuss-Rechner -->
+      <div class="card" style="margin-top:12px;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:10px;">Überschuss-Rechner</div>
+        <div class="controls-row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <select style="flex:1;min-width:140px" x-model="surplusInstitute" @change="surplusResult=null">
+            <option value="">Institut wählen…</option>
+            <template x-for="g in accountGroups" :key="g.institute">
+              <option :value="g.institute" x-text="g.institute"></option>
+            </template>
+          </select>
+          <input type="number" step="0.01" placeholder="Kontostand (€)" style="flex:1;min-width:140px" x-model.number="surplusBalance" @input="surplusResult=null" />
+          <input type="number" step="1" placeholder="Puffer (€)" style="flex:0 0 100px" x-model.number="surplusBuffer" @input="surplusResult=null" />
+          <button type="button" style="flex:0 0 auto;width:auto;" @click="calcSurplus()">Berechnen</button>
+        </div>
+        <template x-if="surplusResult">
+          <div>
+            <template x-if="surplusResult.pending_items.length === 0">
+              <p class="muted" style="font-size:13px;margin:4px 0;">Keine ausstehenden Buchungen mehr diesen Monat.</p>
+            </template>
+            <template x-for="item in surplusResult.pending_items" :key="item.label+item.day">
+              <div style="display:flex;gap:8px;padding:4px 0;border-top:1px solid var(--border);font-size:13px;align-items:baseline;">
+                <span style="color:var(--muted);min-width:28px" x-text="item.day + '.'"></span>
+                <span style="flex:1" x-text="item.label"></span>
+                <span style="font-weight:600" :style="item.amount >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'" x-text="(item.amount >= 0 ? '+' : '-') + fmt(Math.abs(item.amount))"></span>
+              </div>
+            </template>
+            <div style="margin-top:10px;padding-top:10px;border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div style="font-size:12px;color:var(--muted);line-height:1.5">
+                <span x-text="fmt(surplusResult.balance)"></span> Kontostand<br>
+                <span x-text="fmt(surplusResult.pending_total)"></span> ausstehend<br>
+                <span x-text="fmt(surplusResult.buffer)"></span> Puffer
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">jetzt übertragbar</div>
+                <div style="font-weight:800;font-size:22px;" :style="surplusResult.transferable >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'" x-text="fmt(surplusResult.transferable)"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </div>
     </template>
   </div>
@@ -1800,6 +1841,7 @@
                       <input type="checkbox" style="width:auto" :checked="r.active" @change="toggleRecurring(r)">
                       <span class="muted" style="font-size:12px">aktiv</span>
                     </label>
+                    <button x-show="dlidx===0 && (r.display_lines||[]).length > 1" type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" title="Aufteilen in einzelne Daueraufträge" @click="splitRecurring(r)">✂️</button>
                     <button x-show="dlidx===0" type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="editRecurringOpen(r)">✏️</button>
                     <button x-show="dlidx===0" type="button" class="btn-link" style="background:none;border:none;color:var(--muted);cursor:pointer;width:auto" @click="deleteRecurring(r)">🗑️</button>
                   </div>
@@ -2037,6 +2079,10 @@
         accountsLoading: false,
         unassignedLines: [],
         unassignedOpen: false,
+        surplusInstitute: '',
+        surplusBalance: null,
+        surplusBuffer: 500,
+        surplusResult: null,
         currentAccount: null,
         accountBookings: [],
         accountRecurring: [],
@@ -2766,6 +2812,32 @@
             await this.loadAccountDetail(this.currentAccount.id);
             await this.loadAccounts();
           }
+        },
+
+        async splitRecurring(r){
+          const ok = await this.confirmMsg(
+            `${(r.display_lines||[]).length} Posten als einzelne Daueraufträge aufteilen?`,
+            'Aufteilen'
+          );
+          if(!ok) return;
+          const res = await authFetch(this.api + '/api/recurring/' + r.id + '/split', {method:'POST'});
+          if(!res.ok){ await this.alertMsg('Aufteilen fehlgeschlagen'); return; }
+          await this.loadAccountDetail(this.currentAccount.id);
+          await this.loadAccounts();
+        },
+
+        async calcSurplus(){
+          if(!this.surplusInstitute || this.surplusBalance == null){
+            await this.alertMsg('Bitte Institut und Kontostand angeben.', 'Pflichtfeld'); return;
+          }
+          const params = new URLSearchParams({
+            institute: this.surplusInstitute,
+            balance: this.surplusBalance,
+            buffer: this.surplusBuffer ?? 0,
+          });
+          const res = await authFetch(this.api + '/api/surplus?' + params);
+          if(!res.ok){ await this.alertMsg('Berechnung fehlgeschlagen'); return; }
+          this.surplusResult = await res.json();
         },
 
         async saveEmail(){
