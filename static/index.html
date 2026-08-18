@@ -1574,42 +1574,47 @@
         </div>
       </template>
 
-      <!-- Überschuss-Rechner -->
+      <!-- Disposchutz -->
       <div class="card" style="margin-top:12px;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:10px;">Überschuss-Rechner</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:10px;">Disposchutz</div>
         <div class="controls-row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <select style="flex:1;min-width:140px" x-model="surplusInstitute" @change="surplusResult=null">
+          <select style="flex:1;min-width:140px" x-model="dispoInstitute" @change="dispoResult=null">
             <option value="">Institut wählen…</option>
             <template x-for="g in accountGroups" :key="g.institute">
               <option :value="g.institute" x-text="g.institute"></option>
             </template>
           </select>
-          <input type="number" step="0.01" placeholder="Kontostand (€)" style="flex:1;min-width:140px" x-model.number="surplusBalance" @input="surplusResult=null" />
-          <input type="number" step="1" placeholder="Puffer (€)" style="flex:0 0 100px" x-model.number="surplusBuffer" @input="surplusResult=null" />
-          <button type="button" style="flex:0 0 auto;width:auto;" @click="calcSurplus()">Berechnen</button>
+          <input type="number" step="0.01" placeholder="Aktueller Kontostand (€)" style="flex:1;min-width:160px" x-model.number="dispoBalance" @input="dispoResult=null" />
+          <button type="button" style="flex:0 0 auto;width:auto;" @click="calcDispo()">Prüfen</button>
         </div>
-        <template x-if="surplusResult">
+        <template x-if="dispoResult">
           <div>
-            <template x-if="surplusResult.pending_items.length === 0">
-              <p class="muted" style="font-size:13px;margin:4px 0;">Keine ausstehenden Buchungen mehr diesen Monat.</p>
-            </template>
-            <template x-for="item in surplusResult.pending_items" :key="item.label+item.day">
-              <div style="display:flex;gap:8px;padding:4px 0;border-top:1px solid var(--border);font-size:13px;align-items:baseline;">
-                <span style="color:var(--muted);min-width:28px" x-text="item.day + '.'"></span>
-                <span style="flex:1" x-text="item.label"></span>
-                <span style="font-weight:600" :style="item.amount >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'" x-text="(item.amount >= 0 ? '+' : '-') + fmt(Math.abs(item.amount))"></span>
+            <!-- Dispo-Status -->
+            <div style="padding:10px 12px;border-radius:10px;margin-bottom:10px;font-weight:600;font-size:14px;"
+                 :style="dispoResult.dispo_risk ? 'background:color-mix(in oklab,var(--acc-expense) 15%,transparent);border:1px solid var(--acc-expense);color:var(--acc-expense)' : 'background:color-mix(in oklab,var(--acc-income) 15%,transparent);border:1px solid var(--acc-income);color:var(--acc-income)'">
+              <span x-show="!dispoResult.dispo_risk" x-text="'✓ Kein Dispo-Risiko bis ' + dispoResult.next_income_date.slice(8,10) + '.' + dispoResult.next_income_date.slice(5,7) + '.'"></span>
+              <span x-show="dispoResult.dispo_risk" x-text="'⚠ Dispo-Risiko! Tiefstand: ' + fmt(dispoResult.min_balance)"></span>
+            </div>
+            <!-- Timeline -->
+            <template x-for="item in dispoResult.items" :key="item.date+item.label">
+              <div style="display:flex;gap:8px;padding:5px 0;font-size:13px;align-items:baseline;"
+                   :style="item.is_income ? 'border-top:2px solid var(--acc-income);margin-top:4px;padding-top:8px;' : 'border-top:1px solid var(--border);'">
+                <span style="color:var(--muted);min-width:32px" x-text="item.date.slice(8,10) + '.' + item.date.slice(5,7) + '.'"></span>
+                <span style="flex:1;" :style="item.is_income ? 'font-weight:600;color:var(--acc-income)' : ''" x-text="item.label"></span>
+                <span style="min-width:80px;text-align:right;font-weight:600"
+                      :style="item.amount >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'"
+                      x-text="(item.amount >= 0 ? '+' : '') + fmt(item.amount)"></span>
+                <span style="min-width:90px;text-align:right;color:var(--muted);font-size:12px"
+                      :style="item.running_balance < 0 ? 'color:var(--acc-expense);font-weight:700' : ''"
+                      x-text="'→ ' + fmt(item.running_balance)"></span>
               </div>
             </template>
-            <div style="margin-top:10px;padding-top:10px;border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-              <div style="font-size:12px;color:var(--muted);line-height:1.5">
-                <span x-text="fmt(surplusResult.balance)"></span> Kontostand<br>
-                <span x-text="fmt(surplusResult.pending_total)"></span> ausstehend<br>
-                <span x-text="fmt(surplusResult.buffer)"></span> Puffer
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">jetzt übertragbar</div>
-                <div style="font-weight:800;font-size:22px;" :style="surplusResult.transferable >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'" x-text="fmt(surplusResult.transferable)"></div>
-              </div>
+            <!-- Ergebnis -->
+            <div style="margin-top:12px;padding-top:10px;border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:13px;color:var(--muted)">jetzt sicher auf Trade Republic</span>
+              <span style="font-weight:800;font-size:22px;"
+                    :style="dispoResult.transferable >= 0 ? 'color:var(--acc-income)' : 'color:var(--acc-expense)'"
+                    x-text="fmt(dispoResult.transferable)"></span>
             </div>
           </div>
         </template>
@@ -2117,10 +2122,9 @@
         accountsLoading: false,
         unassignedLines: [],
         unassignedOpen: false,
-        surplusInstitute: '',
-        surplusBalance: null,
-        surplusBuffer: 500,
-        surplusResult: null,
+        dispoInstitute: '',
+        dispoBalance: null,
+        dispoResult: null,
         currentAccount: null,
         accountBookings: [],
         accountRecurring: [],
@@ -2895,18 +2899,20 @@
           await this.loadAccounts();
         },
 
-        async calcSurplus(){
-          if(!this.surplusInstitute || this.surplusBalance == null){
+        async calcDispo(){
+          if(!this.dispoInstitute || this.dispoBalance == null){
             await this.alertMsg('Bitte Institut und Kontostand angeben.', 'Pflichtfeld'); return;
           }
           const params = new URLSearchParams({
-            institute: this.surplusInstitute,
-            balance: this.surplusBalance,
-            buffer: this.surplusBuffer ?? 0,
+            institute: this.dispoInstitute,
+            balance: this.dispoBalance,
           });
-          const res = await authFetch(this.api + '/api/surplus?' + params);
-          if(!res.ok){ await this.alertMsg('Berechnung fehlgeschlagen'); return; }
-          this.surplusResult = await res.json();
+          const res = await authFetch(this.api + '/api/disposchutz?' + params);
+          if(!res.ok){
+            const err = await res.json().catch(()=>({}));
+            await this.alertMsg(err.detail || 'Berechnung fehlgeschlagen'); return;
+          }
+          this.dispoResult = await res.json();
         },
 
         async saveEmail(){

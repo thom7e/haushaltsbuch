@@ -1066,11 +1066,10 @@ def split_recurring(rule_id: str, user=Depends(get_current_user)):
     write_db(data)
     return {"created": len(new_rules)}
 
-@app.get("/api/surplus")
-def surplus_calc(
+@app.get("/api/disposchutz")
+def disposchutz(
     institute: str = Query(...),
     balance: float = Query(...),
-    buffer: float = Query(0),
     user=Depends(get_current_user),
 ):
     data = read_db()
@@ -1082,45 +1081,94 @@ def surplus_calc(
     if not account_ids:
         raise HTTPException(404, "Kein Konto für dieses Institut gefunden")
     lines_by_id = {l["id"]: l for l in data["lines"] if l.get("user_id") == user["id"]}
-    pending_items = []
+
+    income_rules, expense_rules = [], []
     for r in data["recurring_rules"]:
         if r.get("account_id") not in account_ids:
             continue
         rule = normalize_recurring_rule(r)
         if not rule["active"]:
             continue
-        if not _should_trigger(rule, today.year, today.month):
-            continue
-        if rule["day_of_month"] < today.day:
-            continue
         linked = [lines_by_id[lid] for lid in rule.get("linked_line_ids", []) if lid in lines_by_id]
-        if linked:
-            mult = _freq_multiplier(rule)
-            for l in linked:
-                nl = normalize_line(l)
-                amt = total_of_line(nl) * mult
-                signed = amt if nl["type"] == "income" else -amt
-                pending_items.append({
-                    "label": nl.get("label", ""),
-                    "day": rule["day_of_month"],
-                    "amount": round(signed, 2),
-                    "rule_type": rule.get("rule_type", "Dauerauftrag"),
-                })
-        elif rule.get("manual_label") and rule.get("manual_amount") is not None:
-            pending_items.append({
-                "label": rule["manual_label"],
-                "day": rule["day_of_month"],
-                "amount": round(-float(rule["manual_amount"]), 2),
-                "rule_type": rule.get("rule_type", "Dauerauftrag"),
-            })
-    pending_items.sort(key=lambda x: x["day"])
-    pending_total = round(sum(x["amount"] for x in pending_items), 2)
-    transferable = round(balance + pending_total - buffer, 2)
+        mult = _freq_multiplier(rule)
+        if linked and all(normalize_line(l)["type"] == "income" for l in linked):
+            income_rules.append((rule, linked, mult))
+        else:
+            expense_rules.append((rule, linked, mult))
+
+    # Detect next income date from monthly income rules
+    income_day = None
+    for rule, _, _ in income_rules:
+        if rule["frequency"] == "monthly":
+            income_day = rule["day_of_month"]
+            break
+        if rule["frequency"] == "custom" and today.month in (rule.get("months") or []):
+            income_day = rule["day_of_month"]
+            break
+
+    if income_day is None:
+        raise HTTPException(422, "Kein monatlicher Einnahmen-Dauerauftrag gefunden")
+
+    if income_day > today.day:
+        next_income = date(today.year, today.month, income_day)
+    else:
+        y, m = today.year, today.month + 1
+        if m > 12:
+            y, m = y + 1, 1
+        next_income = date(y, m, income_day)
+
+    # Collect income amount for the income day
+    income_amount = sum(
+        sum(total_of_line(normalize_line(l)) for l in linked) * mult
+        for rule, linked, mult in income_rules
+        if _should_trigger(rule, next_income.year, next_income.month)
+        and rule["day_of_month"] == income_day
+    )
+
+    # Collect expense items between today (inclusive) and next_income (exclusive)
+    items = []
+    check_periods = {(today.year, today.month)}
+    y, m = today.year, today.month + 1
+    if m > 12: y, m = y + 1, 1
+    check_periods.add((y, m))
+
+    for rule, linked, mult in expense_rules:
+        dom = rule["day_of_month"]
+        for (ry, rm) in sorted(check_periods):
+            if not _should_trigger(rule, ry, rm):
+                continue
+            item_date = date(ry, rm, dom)
+            if item_date < today or item_date >= next_income:
+                continue
+            if linked:
+                nl = normalize_line(linked[0])
+                label = ", ".join(normalize_line(l).get("label", "") for l in linked)
+                amt = -sum(total_of_line(normalize_line(l)) for l in linked) * mult
+            else:
+                label = rule.get("manual_label") or ""
+                amt = -float(rule.get("manual_amount") or 0)
+            items.append({"date": item_date.isoformat(), "day": dom, "label": label, "amount": round(amt, 2), "is_income": False})
+
+    # Add income marker
+    items.append({"date": next_income.isoformat(), "day": income_day, "label": "Gehaltseingang", "amount": round(income_amount, 2), "is_income": True})
+    items.sort(key=lambda x: x["date"])
+
+    # Running balance
+    running = balance
+    min_balance = balance
+    for item in items:
+        running = round(running + item["amount"], 2)
+        item["running_balance"] = running
+        if not item["is_income"]:
+            min_balance = min(min_balance, running)
+
     return {
         "institute": institute,
         "balance": balance,
-        "buffer": buffer,
-        "pending_items": pending_items,
-        "pending_total": pending_total,
-        "transferable": transferable,
+        "income_day": income_day,
+        "next_income_date": next_income.isoformat(),
+        "items": items,
+        "min_balance": round(min_balance, 2),
+        "dispo_risk": min_balance < 0,
+        "transferable": round(min_balance, 2),
     }
