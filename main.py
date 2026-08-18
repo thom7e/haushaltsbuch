@@ -1242,8 +1242,9 @@ def disposchutz(
             "frequency": rule["frequency"],
         })
     monthly_reserves = round(monthly_reserves, 2)
-    # transferable = final balance after full cycle minus monthly reserves
-    transferable = round(running - monthly_reserves, 2)
+    # transferable = global floor across both months minus monthly reserves
+    # = max amount safely movable to Trade Republic today without ever hitting 0
+    transferable = round(min_balance - monthly_reserves, 2)
 
     return {
         "institute": institute,
