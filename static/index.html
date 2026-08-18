@@ -1580,8 +1580,8 @@
         <div class="controls-row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <select style="flex:1;min-width:140px" x-model="dispoInstitute" @change="dispoResult=null">
             <option value="">Institut wählen…</option>
-            <template x-for="g in accountGroups" :key="g.institute">
-              <option :value="g.institute" x-text="g.institute"></option>
+            <template x-for="inst in dispoInstitutes" :key="inst">
+              <option :value="inst" x-text="inst"></option>
             </template>
           </select>
           <input type="number" step="0.01" placeholder="Aktueller Kontostand (€)" style="flex:1;min-width:160px" x-model.number="dispoBalance" @input="dispoResult=null" />
@@ -2125,6 +2125,7 @@
         dispoInstitute: '',
         dispoBalance: null,
         dispoResult: null,
+        dispoInstitutes: [],
         currentAccount: null,
         accountBookings: [],
         accountRecurring: [],
@@ -2662,6 +2663,7 @@
             this.accounts = data.accounts || [];
             this.accountsTotal = data.total || 0;
             this.unassignedLines = ur.ok ? await ur.json() : [];
+            this.dispoInstitutes = [...new Set(this.accounts.map(a => a.institute).filter(Boolean))].sort();
           } finally {
             this.accountsLoading = false;
             this.$nextTick(()=> this.drawSparklines());
