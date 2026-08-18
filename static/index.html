@@ -1786,28 +1786,24 @@
                         <option value="manual">Manuell eingeben</option>
                       </select>
                     </div>
-                    <template x-if="editingRecurring.source==='linked'">
+                    <div x-show="editingRecurring.source==='linked'" class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                      <label style="min-width:120px;flex:0 0 auto;">Posten</label>
+                      <select style="flex:1" x-model="editingRecurring.linked_line_id">
+                        <template x-for="l in lines" :key="'er-'+l.id">
+                          <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div x-show="editingRecurring.source==='manual'">
                       <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                        <label style="min-width:120px;flex:0 0 auto;">Posten</label>
-                        <select style="flex:1" x-model="editingRecurring.linked_line_id">
-                          <template x-for="l in lines" :key="'er-'+l.id">
-                            <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
-                          </template>
-                        </select>
+                        <label style="min-width:120px;flex:0 0 auto;">Bezeichnung</label>
+                        <input style="flex:1" type="text" placeholder="z.B. Spotify" x-model="editingRecurring.manual_label" />
                       </div>
-                    </template>
-                    <template x-if="editingRecurring.source==='manual'">
-                      <div>
-                        <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                          <label style="min-width:120px;flex:0 0 auto;">Bezeichnung</label>
-                          <input style="flex:1" type="text" placeholder="z.B. Spotify" x-model="editingRecurring.manual_label" />
-                        </div>
-                        <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                          <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
-                          <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="editingRecurring.manual_amount" />
-                        </div>
+                      <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                        <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
+                        <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="editingRecurring.manual_amount" />
                       </div>
-                    </template>
+                    </div>
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                       <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
                       <input type="number" min="1" max="28" style="width:90px;" x-model.number="editingRecurring.day_of_month" />
@@ -1863,29 +1859,25 @@
                     <option value="manual">Manuell eingeben</option>
                   </select>
                 </div>
-                <template x-if="newRecurring.source==='linked'">
+                <div x-show="newRecurring.source==='linked'" class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                  <label style="min-width:120px;flex:0 0 auto;">Posten</label>
+                  <select style="flex:1" x-model="newRecurring.linked_line_id">
+                    <option value="">Bitte wählen…</option>
+                    <template x-for="l in lines" :key="'rl-'+l.id">
+                      <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
+                    </template>
+                  </select>
+                </div>
+                <div x-show="newRecurring.source==='manual'">
                   <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                    <label style="min-width:120px;flex:0 0 auto;">Posten</label>
-                    <select style="flex:1" x-model="newRecurring.linked_line_id">
-                      <option value="">Bitte wählen…</option>
-                      <template x-for="l in lines" :key="'rl-'+l.id">
-                        <option :value="l.id" x-text="l.label + ' (' + fmt(total(l)) + ')'"></option>
-                      </template>
-                    </select>
+                    <label style="min-width:120px;flex:0 0 auto;">Bezeichnung</label>
+                    <input style="flex:1" type="text" placeholder="z.B. Spotify" x-model="newRecurring.manual_label" />
                   </div>
-                </template>
-                <template x-if="newRecurring.source==='manual'">
-                  <div>
-                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                      <label style="min-width:120px;flex:0 0 auto;">Bezeichnung</label>
-                      <input style="flex:1" type="text" placeholder="z.B. Spotify" x-model="newRecurring.manual_label" />
-                    </div>
-                    <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
-                      <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
-                      <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="newRecurring.manual_amount" />
-                    </div>
+                  <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
+                    <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
+                    <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="newRecurring.manual_amount" />
                   </div>
-                </template>
+                </div>
                 <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                   <label style="min-width:120px;flex:0 0 auto;">Tag im Monat</label>
                   <input type="number" min="1" max="28" style="width:90px;" x-model.number="newRecurring.day_of_month" />
