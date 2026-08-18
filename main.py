@@ -929,6 +929,9 @@ def create_recurring(account_id: str, payload: dict = Body(...), user=Depends(ge
         "active": payload.get("active", True),
         "start_date": payload.get("start_date"),
         "end_date": payload.get("end_date"),
+        "rule_type": payload.get("rule_type"),
+        "frequency": payload.get("frequency"),
+        "months": payload.get("months"),
     }, account_id=account_id)
     data["recurring_rules"].append(r)
     write_db(data)
