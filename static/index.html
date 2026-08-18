@@ -1523,7 +1523,7 @@
                 <div class="account-info">
                   <div class="account-name" x-text="grp.accounts[0].name"></div>
                   <div class="account-institute" x-text="grp.accounts[0].institute"></div>
-                  <template x-if="instituteBalances[grp.institute] != null">
+                  <template x-if="instituteBalances[grp.institute] != null && grp.total !== 0">
                     <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(instituteBalances[grp.institute]) + '  Δ ' + fmt(instituteBalances[grp.institute] - grp.total)"></div>
                   </template>
                 </div>
@@ -1541,7 +1541,7 @@
                   <div class="account-info">
                     <div class="account-name" x-text="grp.institute"></div>
                     <div class="account-institute" x-text="grp.accounts.length + ' Unterkonten'"></div>
-                    <template x-if="instituteBalances[grp.institute] != null">
+                    <template x-if="instituteBalances[grp.institute] != null && grp.total !== 0">
                       <div style="font-size:11px;color:var(--muted)" x-text="'Echt: ' + fmt(instituteBalances[grp.institute]) + '  Δ ' + fmt(instituteBalances[grp.institute] - grp.total)"></div>
                     </template>
                   </div>
