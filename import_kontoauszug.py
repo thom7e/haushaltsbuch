@@ -50,7 +50,14 @@ def _parse_money(s):
 
 
 def parse_statement(pdf_path):
-    doc = fitz.open(pdf_path)
+    return _parse_doc(fitz.open(pdf_path))
+
+
+def parse_statement_bytes(data):
+    return _parse_doc(fitz.open(stream=data, filetype="pdf"))
+
+
+def _parse_doc(doc):
     lines = []
     for pg in doc:
         pglines = pg.get_text().split("\n")
@@ -137,6 +144,27 @@ def classify(t):
     return "book", LEBENSMITTEL_ACC
 
 
+def build_plan(txns, imported_fingerprints):
+    """Klassifiziert geparste Transaktionen gegen bereits importierte Fingerprints.
+    Gibt (to_book, skipped, duplicates) zurück."""
+    if txns and txns[0]["signed_amount"] is None:
+        # allererste Zeile: kein Vorgänger-Saldo bekannt -> Vorzeichen über Betrag annehmen
+        txns[0]["signed_amount"] = txns[0]["amount"] if txns[0]["saldo"] > txns[0]["saldo"] - txns[0]["amount"] else -txns[0]["amount"]
+
+    to_book, skipped, duplicates = [], [], []
+    for t in txns:
+        fp = fingerprint(t)
+        if fp in imported_fingerprints:
+            duplicates.append(t)
+            continue
+        action, target = classify(t)
+        if action == "skip":
+            skipped.append((t, target))
+        else:
+            to_book.append((t, target, fp))
+    return to_book, skipped, duplicates
+
+
 def main():
     if len(sys.argv) < 2:
         print("Nutzung: python3 import_kontoauszug.py <pfad-zum-pdf> [--apply]")
@@ -148,26 +176,7 @@ def main():
     imported = set(data.get("imported_statement_txns") or [])
 
     txns = parse_statement(pdf_path)
-    # allererste Zeile: Vorzeichen über Amount + Anfangssaldo-Heuristik (Anfangssaldo unbekannt
-    # falls die Kontoübersicht nicht mitgelesen wird) - Fallback: Betrag als eingehend annehmen,
-    # außer nächster Saldo-Delta widerspricht offensichtlich. In der Praxis hat txns[0] fast immer
-    # einen validen Vorgänger-Saldo aus KONTOÜBERSICHT; hier reicht die Approximation über Zeile 2.
-    if txns and txns[0]["signed_amount"] is None:
-        # nutze Delta zur zweiten Zeile rückwärts nicht verlässlich -> nimm Betrag mit dem Vorzeichen,
-        # das zum zweiten Saldo passt (zweite Zeile hat garantiert ein korrektes Delta)
-        txns[0]["signed_amount"] = txns[0]["amount"] if txns[0]["saldo"] > txns[0]["saldo"] - txns[0]["amount"] else -txns[0]["amount"]
-
-    to_book, skipped, duplicates = [], [], []
-    for t in txns:
-        fp = fingerprint(t)
-        if fp in imported:
-            duplicates.append(t)
-            continue
-        action, target = classify(t)
-        if action == "skip":
-            skipped.append((t, target))
-        else:
-            to_book.append((t, target, fp))
+    to_book, skipped, duplicates = build_plan(txns, imported)
 
     print(f"{len(txns)} Transaktionen im Auszug, {len(duplicates)} bereits importiert (übersprungen)")
     print(f"\n{len(skipped)} bewusst übersprungen:")
@@ -190,6 +199,15 @@ def main():
     json.dump(data, open(backup_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     print(f"\nBackup geschrieben: {backup_path}")
 
+    commit_plan(data, to_book, skipped, imported)
+    json.dump(data, open(DB_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"{len(to_book)} Buchung(en) angelegt, DB gespeichert.")
+
+
+def commit_plan(data, to_book, skipped, imported_fingerprints):
+    """Legt Buchungen aus to_book an und merkt alle (gebuchten + übersprungenen)
+    Fingerprints als importiert vor, damit ein erneuter Import nichts doppelt bucht.
+    Mutiert `data` in place."""
     import uuid
     for t, target, fp in to_book:
         data["bookings"].append({
@@ -201,13 +219,10 @@ def main():
             "source": "manual",
             "recurring_rule_id": None,
         })
-        imported.add(fp)
+        imported_fingerprints.add(fp)
     for t, _ in skipped:
-        imported.add(fingerprint(t))
-
-    data["imported_statement_txns"] = sorted(imported)
-    json.dump(data, open(DB_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    print(f"{len(to_book)} Buchung(en) angelegt, DB gespeichert.")
+        imported_fingerprints.add(fingerprint(t))
+    data["imported_statement_txns"] = sorted(imported_fingerprints)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body, Depends, Request
+from fastapi import FastAPI, HTTPException, Body, Depends, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
@@ -12,6 +12,10 @@ from passlib.context import CryptContext
 import json, os, uuid, time, shutil, threading
 import jwt  # PyJWT
 from fastapi import Query
+from import_kontoauszug import (
+    parse_statement_bytes, build_plan, commit_plan,
+    LEBENSMITTEL_ACC, RENTENSPAREN_ACC,
+)
 
 
 # =========================================
@@ -979,6 +983,46 @@ def delete_booking(booking_id: str, user=Depends(get_current_user)):
     data["bookings"].pop(idx)
     write_db(data)
     return {"ok": True}
+
+STATEMENT_IMPORT_ACC_NAMES = {
+    RENTENSPAREN_ACC: "Rentensparen Sammelkonto",
+    LEBENSMITTEL_ACC: "Lebensmittel",
+}
+
+@app.post("/api/statement-import")
+async def statement_import(commit: bool = Query(False), file: UploadFile = File(...), user=Depends(get_current_user)):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(422, "Nur PDF-Kontoauszüge werden unterstützt.")
+    pdf_bytes = await file.read()
+    try:
+        txns = parse_statement_bytes(pdf_bytes)
+    except Exception:
+        raise HTTPException(422, "PDF konnte nicht gelesen werden.")
+
+    data = read_db()
+    imported = set(data.get("imported_statement_txns") or [])
+    to_book, skipped, duplicates = build_plan(txns, imported)
+
+    result = {
+        "txn_count": len(txns),
+        "duplicate_count": len(duplicates),
+        "total": round(sum(t["signed_amount"] for t, _, _ in to_book), 2),
+        "skipped": [
+            {"date": t["date"], "amount": t["signed_amount"], "typ": t["typ"], "desc": t["desc"], "reason": reason}
+            for t, reason in skipped
+        ],
+        "to_book": [
+            {"date": t["date"], "amount": t["signed_amount"], "typ": t["typ"], "desc": t["desc"],
+             "account": STATEMENT_IMPORT_ACC_NAMES.get(target, target)}
+            for t, target, _ in to_book
+        ],
+        "committed": False,
+    }
+    if commit:
+        commit_plan(data, to_book, skipped, imported)
+        write_db(data)
+        result["committed"] = True
+    return result
 
 @app.get("/api/accounts/{account_id}/recurring")
 def list_recurring(account_id: str, user=Depends(get_current_user)):

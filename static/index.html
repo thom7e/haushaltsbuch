@@ -1503,6 +1503,8 @@
       <div class="card">
         <div class="accounts-header">
           <button type="button" @click="newAccountModal()">+ Konto</button>
+          <button type="button" @click="$refs.statementFileInput.click()">📄 Auszug</button>
+          <input type="file" x-ref="statementFileInput" accept="application/pdf" style="display:none" @change="handleStatementFile($event)" />
           <span class="total" x-text="fmt(accountsTotal)"></span>
         </div>
 
@@ -2112,6 +2114,85 @@
     </div>
   </template>
 
+  <!-- ======= Modal: Kontoauszug-Import ======= -->
+  <template x-if="statementImport">
+    <div class="modal-overlay" @click.self="sheetClose($event, () => closeStatementImport())">
+      <div class="modal" @keydown.escape.window="sheetClose($event, () => closeStatementImport())">
+        <div class="sheet-handle"
+             @touchstart.passive="dragStart($event, () => closeStatementImport())"
+             @touchmove.prevent="dragMove($event)"
+             @touchend="dragEnd($event)"></div>
+        <h3>Kontoauszug-Import</h3>
+
+        <div class="loading-row" x-show="statementImport.loading">
+          <div class="spinner"></div>
+          <span>Auszug wird analysiert…</span>
+        </div>
+
+        <template x-if="statementImport.error">
+          <div style="color:var(--acc-expense);font-size:13px;margin-bottom:10px" x-text="statementImport.error"></div>
+        </template>
+
+        <template x-if="statementImport.result && !statementImport.loading">
+          <div>
+            <template x-if="statementImport.result.committed">
+              <div style="padding:10px 12px;border-radius:10px;margin-bottom:12px;font-weight:600;font-size:14px;background:color-mix(in oklab,var(--acc-income) 15%,transparent);border:1px solid var(--acc-income);color:var(--acc-income)">
+                ✓ <span x-text="statementImport.result.to_book.length"></span> Buchungen angelegt
+              </div>
+            </template>
+
+            <div class="muted" style="font-size:13px;margin-bottom:8px">
+              <span x-text="statementImport.result.txn_count"></span> Transaktionen im Auszug ·
+              <span x-text="statementImport.result.to_book.length"></span> werden gebucht ·
+              <span x-text="statementImport.result.skipped.length"></span> übersprungen ·
+              <span x-text="statementImport.result.duplicate_count"></span> bereits importiert
+            </div>
+            <div style="font-weight:600;margin-bottom:12px" x-text="'Summe: ' + fmt(statementImport.result.total)"></div>
+
+            <h3 class="muted" style="margin:12px 0 6px;font-size:13px;font-weight:600">Werden gebucht</h3>
+            <div style="max-height:220px;overflow-y:auto;">
+              <template x-for="(t, i) in statementImport.result.to_book" :key="'book-'+i">
+                <div class="booking-row" style="align-items:center;">
+                  <div style="flex:1;min-width:0;">
+                    <div x-text="t.desc" style="font-size:13px"></div>
+                    <div class="muted" style="font-size:11px" x-text="t.date.slice(8,10)+'.'+t.date.slice(5,7)+'.'+t.date.slice(0,4) + ' · ' + t.account"></div>
+                  </div>
+                  <span class="booking-amount" :class="t.amount>=0?'positive':'negative'" x-text="fmt(t.amount)"></span>
+                </div>
+              </template>
+            </div>
+
+            <template x-if="statementImport.result.skipped.length > 0">
+              <div>
+                <h3 class="muted" style="margin:14px 0 6px;font-size:13px;font-weight:600;cursor:pointer" @click="statementImport.showSkipped=!statementImport.showSkipped">
+                  Übersprungen (<span x-text="statementImport.result.skipped.length"></span>) <span x-text="statementImport.showSkipped?'▲':'▼'"></span>
+                </h3>
+                <div x-show="statementImport.showSkipped" style="max-height:180px;overflow-y:auto;">
+                  <template x-for="(t, i) in statementImport.result.skipped" :key="'skip-'+i">
+                    <div class="booking-row" style="align-items:center;">
+                      <div style="flex:1;min-width:0;">
+                        <div x-text="t.desc" style="font-size:12px"></div>
+                        <div class="muted" style="font-size:11px" x-text="t.reason"></div>
+                      </div>
+                      <span class="muted" style="font-size:12px" x-text="fmt(t.amount)"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <div class="controls-row" style="margin-top:16px;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
+              <template x-if="!statementImport.result.committed">
+                <button type="button" class="btn-primary" style="flex:0 0 auto;width:auto" @click="confirmStatementImport()">Buchen</button>
+              </template>
+              <button type="button" style="flex:0 0 auto;width:auto" @click="sheetClose($event, () => closeStatementImport())">Schließen</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
   <!-- Theme Switcher init -->
   <script>
     (function(){
@@ -2175,6 +2256,7 @@
         editingRecurring: null,
         newBooking: {date:'', amount:null, note:''},
         newRecurring: {source:'linked', linked_line_ids:[], manual_label:'', manual_amount:null, day_of_month:1, start_date:'', rule_type:'Dauerauftrag', frequency:'monthly', months:[], billing_month:null},
+        statementImport: null,
 
         categoriesServer: [],
         sessionCategories: [],
@@ -2760,6 +2842,45 @@
         },
         closeAccountModal(){
           this.currentAccount = null;
+          document.body.classList.remove('no-scroll');
+        },
+
+        handleStatementFile(ev){
+          const file = ev.target.files[0];
+          ev.target.value = '';
+          if(!file) return;
+          this.statementImport = {file, loading:true, error:null, result:null, showSkipped:false};
+          document.body.classList.add('no-scroll');
+          this.uploadStatement(false);
+        },
+        async uploadStatement(commit){
+          const si = this.statementImport;
+          si.loading = true;
+          si.error = null;
+          try{
+            const fd = new FormData();
+            fd.append('file', si.file);
+            const res = await authFetch(this.api + '/api/statement-import?commit=' + (commit?'true':'false'), {method:'POST', body:fd});
+            if(!res.ok){
+              const err = await res.json().catch(()=>({}));
+              throw new Error(err.detail || 'Import fehlgeschlagen');
+            }
+            si.result = await res.json();
+          }catch(e){
+            si.error = e.message || 'Import fehlgeschlagen';
+          }finally{
+            si.loading = false;
+          }
+        },
+        async confirmStatementImport(){
+          await this.uploadStatement(true);
+          if(this.statementImport.result?.committed && this.currentAccount?.id){
+            this.loadAccountDetail(this.currentAccount.id);
+          }
+          this.loadAccounts();
+        },
+        closeStatementImport(){
+          this.statementImport = null;
           document.body.classList.remove('no-scroll');
         },
 
