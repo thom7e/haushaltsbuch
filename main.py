@@ -292,6 +292,7 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
                     pass
 
         skipped = set(rule.get("skipped_occurrences") or [])
+        is_income = bool(linked) and all(normalize_line(l)["type"] == "income" for l in linked)
 
         y, m = start.year, start.month
         while (y, m) <= (today.year, today.month):
@@ -300,7 +301,11 @@ def run_recurring_catchup(user_id: str, data: dict) -> bool:
             ym_str = f"{y}-{m:02d}"
             if in_range and (y, m) not in existing_months and _should_trigger(rule, y, m) and ym_str not in skipped:
                 mult = _freq_multiplier(rule)
-                b_amount = sum(account_deposit_amount(l) for l in linked) * mult if linked else float(rule["manual_amount"])
+                if linked:
+                    raw_amount = sum(account_deposit_amount(l) for l in linked) * mult
+                    b_amount = raw_amount if is_income else -raw_amount
+                else:
+                    b_amount = -float(rule["manual_amount"])
                 b_note = ", ".join(l.get("label","") for l in linked) if linked else (rule["manual_label"] or "")
                 booking = normalize_booking({
                     "date": occurrence.isoformat(),
