@@ -1,7 +1,9 @@
 """
 Einmalige Korrektur: bestehende recurring-Buchungen (Daueraufträge/Abbuchungen)
-wurden durch einen Bug immer als + gebucht. Dieses Script korrigiert das Vorzeichen
-nachträglich, ohne die bereits gespeicherten Beträge (Höhe) zu verändern.
+müssen per rule_type gebucht werden: Lastschrift = minus, Dauerauftrag = plus
+(rule_type dient hier als expliziter Richtungsschalter, nicht der Posten-Typ,
+da Trade-Republic-Unterkonten dieselben "expense"-Posten wie Consorsbank haben,
+aber mit umgekehrtem Vorzeichen — siehe Übertrag-Paare).
 
 Nutzung auf dem Server:
     python3 fix_recurring_signs.py [--apply]
@@ -23,7 +25,6 @@ def main():
     with open(DB_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    lines_by_id = {l["id"]: l for l in data.get("lines", [])}
     rules_by_id = {r["id"]: r for r in data.get("recurring_rules", [])}
 
     changes = []
@@ -35,10 +36,7 @@ def main():
             print(f"WARNUNG: Buchung {b.get('id')} verweist auf gelöschten Dauerauftrag, übersprungen")
             continue
 
-        linked_ids = rule.get("linked_line_ids") or ([rule["linked_line_id"]] if rule.get("linked_line_id") else [])
-        linked = [lines_by_id[lid] for lid in linked_ids if lid in lines_by_id]
-        is_income = bool(linked) and all(l.get("type") == "income" for l in linked)
-
+        is_income = rule.get("rule_type") != "Lastschrift"
         current = float(b.get("amount") or 0)
         correct = abs(current) if is_income else -abs(current)
 
