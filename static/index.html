@@ -1602,7 +1602,7 @@
               <option :value="inst" x-text="inst"></option>
             </template>
           </select>
-          <input type="number" step="0.01" placeholder="Aktueller Kontostand (€)" style="flex:1;min-width:160px" x-model.number="dispoBalance" @input="dispoResult=null" />
+          <input type="text" inputmode="decimal" placeholder="Aktueller Kontostand (€)" style="flex:1;min-width:160px" x-model="dispoBalance" @input="dispoResult=null" />
           <button type="button" style="flex:0 0 auto;width:auto;" @click="calcDispo()">Prüfen</button>
         </div>
         <template x-if="dispoResult">
@@ -1732,7 +1732,7 @@
         <!-- Pauschalsumme -->
         <div class="controls-row" style="margin-bottom:8px; align-items:flex-start;">
           <label style="min-width:160px;flex:0 0 auto;">Pauschalsumme</label>
-          <input type="number" step="0.01" x-model.number="current.base_amount" style="width:200px;max-width:200px;" />
+          <input type="text" inputmode="decimal" x-model="current.base_amount" style="width:200px;max-width:200px;" />
         </div>
 
         <!-- Variabel -->
@@ -1746,7 +1746,7 @@
         <template x-for="si in current.subitems" :key="si.id || si._key">
           <div class="sub-row">
             <input placeholder="Bezeichnung" x-model="si.label" />
-            <input type="number" step="0.01" x-model.number="si.amount" />
+            <input type="text" inputmode="decimal" x-model="si.amount" />
             <button type="button" class="btn-link"
                     style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer"
                     @click.stop.prevent="removeSubPersist(si)">🗑️</button>
@@ -1921,7 +1921,7 @@
                       </div>
                       <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                         <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
-                        <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="editingRecurring.manual_amount" />
+                        <input style="flex:1" type="text" inputmode="decimal" placeholder="0,00" x-model="editingRecurring.manual_amount" />
                       </div>
                     </div>
                     <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
@@ -2016,7 +2016,7 @@
                   </div>
                   <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
                     <label style="min-width:120px;flex:0 0 auto;">Betrag (€)</label>
-                    <input style="flex:1" type="number" step="0.01" min="0" placeholder="0,00" x-model.number="newRecurring.manual_amount" />
+                    <input style="flex:1" type="text" inputmode="decimal" placeholder="0,00" x-model="newRecurring.manual_amount" />
                   </div>
                 </div>
                 <div class="controls-row" style="margin-bottom:8px;align-items:flex-start;">
@@ -2088,7 +2088,7 @@
             <div class="card" style="margin-bottom:8px;">
               <div class="controls-row" style="gap:8px;flex-wrap:wrap;align-items:flex-start;">
                 <input type="date" style="flex:1;min-width:140px" x-model="newBooking.date" />
-                <input type="number" step="0.01" placeholder="Betrag (z.B. -20)" style="flex:1;min-width:140px" x-model.number="newBooking.amount" />
+                <input type="text" inputmode="decimal" placeholder="Betrag (z.B. -20)" style="flex:1;min-width:140px" x-model="newBooking.amount" />
                 <input placeholder="Notiz" style="flex:1;min-width:140px" x-model="newBooking.note" />
                 <button type="button" style="flex:0 0 auto;width:auto" @click="addBooking()">+ Buchung</button>
               </div>
@@ -2539,9 +2539,16 @@
         total(l){
           if(!l) return 0;
           if(Array.isArray(l.subitems) && l.subitems.length>0){
-            return l.subitems.reduce((a,b)=>a+Number(b.amount||0),0);
+            return l.subitems.reduce((a,b)=>a+this.deNum(b.amount),0);
           }
-          return Number(l.base_amount||0);
+          return this.deNum(l.base_amount);
+        },
+
+        deNum(v){
+          if(v === null || v === undefined || v === '') return 0;
+          if(typeof v === 'number') return v;
+          const n = parseFloat(String(v).trim().replace(',', '.'));
+          return isNaN(n) ? 0 : n;
         },
 
         fmt(v){
@@ -2622,11 +2629,11 @@
 
           const payload = JSON.parse(JSON.stringify(this.current));
           if(!hasId){ delete payload.id; }
-          payload.base_amount = Number(payload.base_amount || 0);
+          payload.base_amount = this.deNum(payload.base_amount);
           payload.subitems = (payload.subitems||[]).map(si => ({
             id: si.id || null,
             label: si.label || '',
-            amount: Number(si.amount || 0)
+            amount: this.deNum(si.amount)
           }));
 
           const res = await authFetch(url, {
@@ -2931,7 +2938,7 @@
 
         async addBooking(){
           if(!this.currentAccount?.id) return;
-          const amt = Number(this.newBooking.amount);
+          const amt = this.deNum(this.newBooking.amount);
           if(!amt){ await this.alertMsg('Bitte einen Betrag ungleich 0 eingeben.', 'Pflichtfeld'); return; }
           const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/bookings', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -2961,6 +2968,7 @@
           if(this.newRecurring.source === 'manual' && (!this.newRecurring.manual_label || this.newRecurring.manual_amount == null)){ await this.alertMsg('Bitte Bezeichnung und Betrag eingeben.', 'Pflichtfeld'); return; }
           if(this.newRecurring.frequency === 'yearly' && !this.newRecurring.billing_month){ await this.alertMsg('Bitte den Fälligkeitsmonat wählen.', 'Pflichtfeld'); return; }
           const payload = {...this.newRecurring};
+          if(payload.source === 'manual') payload.manual_amount = this.deNum(payload.manual_amount);
           if(payload.frequency === 'yearly' && payload.billing_month)
             payload.start_date = this.billingMonthToStartDate(payload.billing_month, payload.day_of_month);
           const res = await authFetch(this.api + '/api/accounts/' + this.currentAccount.id + '/recurring', {
@@ -3045,7 +3053,7 @@
             body: JSON.stringify({
               linked_line_ids: r.source === 'linked' ? r.linked_line_ids : [],
               manual_label: r.source === 'manual' ? r.manual_label : null,
-              manual_amount: r.source === 'manual' ? r.manual_amount : null,
+              manual_amount: r.source === 'manual' ? this.deNum(r.manual_amount) : null,
               day_of_month: r.day_of_month,
               start_date,
               rule_type: r.rule_type,
@@ -3096,12 +3104,12 @@
         },
 
         async calcDispo(){
-          if(!this.dispoInstitute || this.dispoBalance == null){
+          if(!this.dispoInstitute || this.dispoBalance === null || this.dispoBalance === ''){
             await this.alertMsg('Bitte Institut und Kontostand angeben.', 'Pflichtfeld'); return;
           }
           const params = new URLSearchParams({
             institute: this.dispoInstitute,
-            balance: this.dispoBalance,
+            balance: this.deNum(this.dispoBalance),
           });
           const res = await authFetch(this.api + '/api/disposchutz?' + params);
           if(!res.ok){
