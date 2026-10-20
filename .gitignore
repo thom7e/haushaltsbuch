@@ -5,3 +5,6 @@ db.json.tmp
 *.pyc
 .env
 db.json
+*.bak
+kontoauszug.pdf
+.cache/
