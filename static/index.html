@@ -972,6 +972,21 @@
       width:auto;
       padding:8px 14px;
     }
+    /* Ausgaben-Auswertung Lebensmittel */
+    .spend-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+    .spend-head h3{margin:0;font-size:17px;flex:1;min-width:160px}
+    .spend-head button{width:auto;padding:6px 12px}
+    .spend-head button.on{background:var(--acc4);color:#141923;border-color:var(--acc4)}
+    .spend-period{font-weight:700;font-size:14px;min-width:120px;text-align:center}
+    .spend-total{font-size:26px;font-weight:800;margin-bottom:12px}
+    .spend-sec{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px}
+    .spend-row{margin-bottom:10px;cursor:pointer}
+    .spend-line{display:flex;justify-content:space-between;gap:10px;font-size:15px;font-weight:600;margin-bottom:4px}
+    .spend-line small{color:var(--muted);font-weight:500;margin-left:6px}
+    .spend-bar{height:26px;border-radius:8px;background:var(--panel-2);overflow:hidden}
+    .spend-bar span{display:block;height:100%;border-radius:8px;background:linear-gradient(90deg,var(--acc5),var(--acc3))}
+    .spend-items{margin:6px 0 4px 8px;padding-left:10px;border-left:2px solid var(--border);font-size:13px;color:var(--muted)}
+    .spend-items div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
     .account-row{
       display:flex;
       align-items:center;
@@ -1571,6 +1586,47 @@
           </div>
         </template>
       </div>
+
+      <!-- Ausgaben-Auswertung Lebensmittel -->
+      <template x-if="spendAccount">
+        <div class="card" style="margin-top:12px">
+          <div class="spend-head">
+            <h3 x-text="'Ausgaben ' + spendAccount.name"></h3>
+            <button type="button" @click="spendShift(-1)">◀</button>
+            <div class="spend-period" x-text="spendLabel"></div>
+            <button type="button" @click="spendShift(1)" :disabled="spendOffset===0">▶</button>
+            <template x-for="m in [1,3,6]" :key="m">
+              <button type="button" :class="{on: spendMonths===m}" @click="spendMonths=m" x-text="m+' M'"></button>
+            </template>
+          </div>
+          <div class="spend-total" x-text="fmt(-spendTotal)"></div>
+          <template x-if="spendGroups.length===0"><div style="color:var(--muted)">Keine Ausgaben im Zeitraum.</div></template>
+          <template x-for="sec in spendSections" :key="sec.key">
+            <div x-show="sec.list.length>0">
+              <div class="spend-sec" x-text="sec.title + ' · ' + fmt(-sec.sum)"></div>
+              <template x-for="g in sec.list.slice(0, spendShowAll[sec.key] ? 999 : 12)" :key="sec.key + g.name">
+                <div class="spend-row" @click="spendOpen = (spendOpen===sec.key+g.name ? '' : sec.key+g.name)">
+                  <div class="spend-line">
+                    <span><span x-text="g.name"></span><small x-text="g.count + '×'" x-show="g.count>1"></small><small x-text="g.items[0].date.slice(8,10)+'.'+g.items[0].date.slice(5,7)+'.'" x-show="g.count===1"></small></span>
+                    <span><span x-text="fmt(-g.sum)"></span><small x-text="Math.round(g.sum/spendTotal*100) + ' %'"></small><small x-show="spendMonths>1" x-text="'(Ø ' + fmt(-g.sum/spendMonths) + '/Mon.)'"></small></span>
+                  </div>
+                  <div class="spend-bar"><span :style="'width:' + (g.sum/sec.list[0].sum*100) + '%'"></span></div>
+                  <template x-if="spendOpen===sec.key+g.name && g.count>1">
+                    <div class="spend-items">
+                      <template x-for="b in g.items" :key="b.id">
+                        <div><span x-text="b.date.slice(8,10)+'.'+b.date.slice(5,7)+'.'"></span><span x-text="fmt(b.amount)"></span></div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="sec.list.length>12">
+                <button type="button" style="width:auto;padding:6px 12px;margin:2px 0 10px" @click="spendShowAll[sec.key]=!spendShowAll[sec.key]" x-text="spendShowAll[sec.key] ? 'Weniger' : 'Alle ' + sec.list.length + ' anzeigen'"></button>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
 
       <!-- Unzugeteilte Posten -->
       <template x-if="unassignedLines.length > 0">
@@ -2238,6 +2294,58 @@
         current: null,
         loading: false,
 
+        // ---- Ausgaben-Auswertung ----
+        spendBookings: [], spendOffset: 0, spendMonths: 1, spendOpen: '', spendShowAll: {multi:false, single:false},
+        get spendAccount(){ return this.accounts.find(a => a.name === 'Lebensmittel') || null; },
+        get spendRange(){
+          const now = new Date();
+          let y = now.getFullYear(), m = now.getMonth() - (now.getDate() < 10 ? 1 : 0) - this.spendOffset;
+          const iso = (yy, mm) => new Date(Date.UTC(yy, mm, 10)).toISOString().slice(0,10);
+          return { from: iso(y, m - this.spendMonths + 1), to: iso(y, m + 1) };
+        },
+        get spendLabel(){
+          const r = this.spendRange, f = d => d.slice(8,10) + '.' + d.slice(5,7) + '.';
+          return f(r.from) + ' – ' + f(r.to) + r.to.slice(2,4);
+        },
+        spendMerchant(note){
+          let n = (note || '').replace(/^[^:]*:\s*/, '').replace(/\s*\(DE[0-9A-Z]+\)\s*$/, '').trim();
+          if(!n) return 'Überweisung (ohne Text)';
+          const rules = [[/lidl/i,'Lidl'],[/rewe/i,'Rewe'],[/aldi/i,'Aldi'],[/penny/i,'Penny'],[/aktiv markt/i,'Aktiv Markt'],
+            [/\bdm\b/i,'dm'],[/amazon|amzn/i,'Amazon'],[/jet-|aral|shell|esso|tankstelle/i,'Tankstelle'],
+            [/baecker|bäcker|backerei|troelsch|katz der/i,'Bäcker'],[/zara/i,'Zara'],[/eventim/i,'Eventim'],[/stage entertainment/i,'Stage Entertainment']];
+          for(const [re, name] of rules) if(re.test(n)) return name;
+          n = n.replace(/^Outgoing transfer for\s+/i, 'Überweisung ').replace(/\*.*$/, '').replace(/\s+\S*\d\S*$/, '').trim();
+          return n.slice(0, 32) || 'Sonstige';
+        },
+        get spendGroups(){
+          const r = this.spendRange, map = {};
+          for(const b of this.spendBookings){
+            if(b.amount >= 0 || b.date < r.from || b.date >= r.to) continue;
+            const k = this.spendMerchant(b.note);
+            (map[k] = map[k] || {name:k, sum:0, count:0, items:[]});
+            map[k].sum -= b.amount; map[k].count++; map[k].items.push(b);
+          }
+          const out = Object.values(map).sort((x, y) => y.sum - x.sum);
+          out.forEach(g => g.items.sort((x, y) => x.amount - y.amount));
+          return out;
+        },
+        get spendSections(){
+          const g = this.spendGroups, sum = l => l.reduce((t, x) => t + x.sum, 0);
+          const multi = g.filter(x => x.count > 1), single = g.filter(x => x.count === 1);
+          return [
+            {key:'multi', title:'Händler mit mehreren Buchungen', list:multi, sum:sum(multi)},
+            {key:'single', title:'Einmalige Ausgaben', list:single, sum:sum(single)},
+          ];
+        },
+        get spendTotal(){ return this.spendGroups.reduce((t, g) => t + g.sum, 0); },
+        spendShift(d){ this.spendOffset = Math.max(0, this.spendOffset - d * this.spendMonths); },
+        async loadSpending(){
+          const a = this.spendAccount;
+          if(!a){ this.spendBookings = []; return; }
+          const res = await authFetch(this.api + '/api/accounts/' + a.id + '/bookings');
+          if(res.ok) this.spendBookings = await res.json();
+        },
+
         // ---- Konten-State ----
         accounts: [],
         accountsTotal: 0,
@@ -2802,6 +2910,7 @@
             this.unassignedLines = ur.ok ? await ur.json() : [];
             this.instituteBalances = ibr.ok ? await ibr.json() : {};
             this.dispoInstitutes = [...new Set(this.accounts.map(a => a.institute).filter(Boolean))].sort();
+            await this.loadSpending();
           } finally {
             this.accountsLoading = false;
             this.$nextTick(()=> this.drawSparklines());

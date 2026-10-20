@@ -37,6 +37,7 @@ MONTHS = {
 }
 
 MONEY_RE = re.compile(r"^([\d.]+),(\d{2})\s*.$")
+TRAILING_MONEY_RE = re.compile(r"^(.*\S)\s+([\d.]+,\d{2}\s*.)$")
 DAY_RE = re.compile(r"^(\d{1,2})$")
 MONTH_RE = re.compile(r"^([A-Za-zÄÖÜäöü]+)\.$")
 YEAR_RE = re.compile(r"^(\d{4})$")
@@ -97,10 +98,17 @@ def _parse_doc(doc):
         if m2:
             typ, first = m2.group(1), m2.group(2)
             desc_parts.append(first)
+        amount = None
         while j < n and _parse_money(lines[j]) is None:
+            tm = TRAILING_MONEY_RE.match(lines[j])
+            if tm and _parse_money(tm.group(2)) is not None and j + 1 < n and _parse_money(lines[j + 1]) is not None:
+                desc_parts.append(tm.group(1))
+                amount = _parse_money(tm.group(2))
+                break
             desc_parts.append(lines[j])
             j += 1
-        amount = _parse_money(lines[j]) if j < n else None
+        if amount is None:
+            amount = _parse_money(lines[j]) if j < n else None
         saldo = _parse_money(lines[j + 1]) if j + 1 < n else None
         if amount is None or saldo is None:
             i += 1
@@ -122,6 +130,11 @@ def _parse_doc(doc):
         else:
             t["signed_amount"] = None  # erste Zeile: kein Vorsaldo bekannt, unten korrigiert
         prev = t["saldo"]
+        if t["signed_amount"] is not None and abs(abs(t["signed_amount"]) - t["amount"]) > 0.005:
+            raise ValueError(
+                f"Saldo-Prüfung fehlgeschlagen: {t['date']} {t['desc'][:40]} Betrag {t['amount']:.2f}, "
+                f"Saldo-Differenz {t['signed_amount']:.2f} — Zeile im Auszug wurde nicht erkannt"
+            )
     return txns
 
 
@@ -137,6 +150,8 @@ def classify(t):
         if desc.startswith("Savings plan execution"):
             return "skip", "Sparplan (bereits als Dauerauftrag getrackt)"
         return "book", RENTENSPAREN_ACC
+    if "Direct Debit Top up" in desc:
+        return "skip", "Consors-Lastschrift für Sparpläne (bereits auf Consors-Seite modelliert)"
     if "berweisung" in typ or "Überweisung" in typ:  # Ü teils als Ersatzzeichen extrahiert
         if "Thomas Kurfiss" in desc:
             return "skip", "Interner Consorsbank<->Trade-Transfer (bereits modelliert)"
